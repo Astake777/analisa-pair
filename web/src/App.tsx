@@ -16,6 +16,8 @@ const NO_LEVELS: { price: number; label: string; kind: string }[] = []
 const NO_DRIVERS: Driver[] = []
 
 const ICON = {
+  sun: <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3" fill="none" stroke="currentColor" strokeWidth="1.5" /><path d="M8 1.5v1.8M8 12.7v1.8M1.5 8h1.8M12.7 8h1.8M3.4 3.4l1.3 1.3M11.3 11.3l1.3 1.3M3.4 12.6l1.3-1.3M11.3 4.7l1.3-1.3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>,
+  moon: <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13.5 9.8A5.8 5.8 0 0 1 6.2 2.5a5.8 5.8 0 1 0 7.3 7.3z" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" /></svg>,
   wait: <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" strokeWidth="1.5" /><path d="M8 4.5V8l2.5 1.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>,
   go: <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" strokeWidth="1.5" /><path d="M5 8.2l2 2 4-4.4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>,
   none: <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" strokeWidth="1.5" /><path d="M5 8h6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>,
@@ -31,6 +33,15 @@ export default function App() {
   const off = Number(offText) || 0
   const [pick, setPick] = useState({ key: '', idx: 0 })
   const [now, setNow] = useState(() => Date.now())
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    const t = store.get('theme')
+    return t === 'light' || t === 'dark' ? t : matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
+  })
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme
+    store.set('theme', theme)
+  }, [theme])
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 5000)
@@ -96,6 +107,13 @@ export default function App() {
             onChange={(e) => { setOffText(e.target.value); store.set(`offset:${PAIR}`, e.target.value) }}
           />
         </label>
+        <button
+          type="button" className="theme-btn" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+          aria-label={theme === 'dark' ? 'Ganti ke tema terang' : 'Ganti ke tema gelap'}
+        >
+          {theme === 'dark' ? ICON.sun : ICON.moon}
+          {theme === 'dark' ? 'Terang' : 'Gelap'}
+        </button>
         <div className={`fresh${anStale ? ' stale' : ''}`} aria-live="polite">
           <span className="dot" />
           <span>{anAge ? (anStale ? `Analisis ${anAge}, jalankan ulang /analisa-pair` : `Analisis ${anAge}`) : an.rows ? 'Belum ada analisis' : 'Menunggu data'}</span>

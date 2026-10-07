@@ -23,13 +23,14 @@ export function Setups({ setups, idx, onPick, off, price }: Props) {
               </span>
               <span className="st">{s.status}</span>
             </div>
+            {s.eksperimen && <p className="exp-tag"><b>Eksperimen</b> {s.eksperimen}</p>}
             {near && <span className="near-tag" role="status">Harga mendekati zona</span>}
             <dl className="kv">
               {s.zone && (<><dt>Zona</dt><dd className="num wide">{fmt(s.zone[0] + off)} – {fmt(s.zone[1] + off)}</dd></>)}
               <dt>Entry</dt><dd className="num wide">{fmt(s.entry + off)}</dd>
-              <dt>SL</dt><dd className="num">{fmt(s.sl + off)}</dd><dd className="rr num">risk {fmt(s.risk)}</dd>
+              <dt>SL</dt><dd className="num">{fmt(s.sl + off)}</dd><dd className="rr num">{pips(Math.abs(s.entry - s.sl))} pips</dd>
               {(s.tp ?? []).map((tp, j) => (
-                <Tp key={j} n={j + 1} price={tp + off} rr={s.rr?.[j]} />
+                <Tp key={j} n={j + 1} price={tp + off} rr={s.rr?.[j]} pip={pips(Math.abs(tp - s.entry))} />
               ))}
             </dl>
             {s.trigger && <p><span>Trigger:</span> {s.trigger}</p>}
@@ -44,10 +45,13 @@ export function Setups({ setups, idx, onPick, off, price }: Props) {
   )
 }
 
-function Tp({ n, price, rr }: { n: number; price: number; rr?: number }) {
+// XAUUSD: 1 pip = $0.10
+const pips = (d: number) => Math.round(d * 10)
+
+function Tp({ n, price, rr, pip }: { n: number; price: number; rr?: number; pip: number }) {
   return (
     <>
-      <dt>TP{n}</dt><dd className="num">{fmt(price)}</dd><dd className="rr num">{rr != null ? `${rr}R` : ''}</dd>
+      <dt>TP{n}</dt><dd className="num">{fmt(price)}</dd><dd className="rr num">{pip} pips{rr != null ? ` · ${rr}R` : ''}</dd>
     </>
   )
 }

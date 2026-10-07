@@ -24,8 +24,9 @@ export class ZoneBands implements ISeriesPrimitive<Time> {
   }
   updateAllViews() {}
 
+  // Isi zona di bawah candle, label di atas candle supaya tetap terbaca.
   paneViews(): readonly ISeriesPrimitivePaneView[] {
-    const renderer: ISeriesPrimitivePaneRenderer = {
+    const draw = (label: boolean): ISeriesPrimitivePaneRenderer => ({
       draw: (target) => {
         const series = this.series
         if (!series) return
@@ -36,11 +37,14 @@ export class ZoneBands implements ISeriesPrimitive<Time> {
             if (y1 == null || y2 == null) continue
             const top = Math.min(y1, y2) * vr, h = Math.max(Math.abs(y2 - y1) * vr, 2 * vr)
             const edge = css(EDGE[z.side])
-            ctx.fillStyle = css(FILL[z.side])
-            ctx.fillRect(0, top, w, h)
-            ctx.fillStyle = edge
-            ctx.fillRect(0, top, w, 1 * vr)
-            ctx.fillRect(0, top + h - 1 * vr, w, 1 * vr)
+            if (!label) {
+              ctx.fillStyle = css(FILL[z.side])
+              ctx.fillRect(0, top, w, h)
+              ctx.fillStyle = edge
+              ctx.fillRect(0, top, w, 1 * vr)
+              ctx.fillRect(0, top + h - 1 * vr, w, 1 * vr)
+              continue
+            }
             ctx.font = `600 ${11 * hr}px ${css('--font-num')}`
             const tw = ctx.measureText(z.label).width
             ctx.fillStyle = css('--card')
@@ -50,7 +54,8 @@ export class ZoneBands implements ISeriesPrimitive<Time> {
           }
         })
       },
-    }
-    return [{ zOrder: () => 'bottom' as const, renderer: () => renderer }]
+    })
+    const fill = draw(false), text = draw(true)
+    return [{ zOrder: () => 'bottom' as const, renderer: () => fill }, { zOrder: () => 'top' as const, renderer: () => text }]
   }
 }
