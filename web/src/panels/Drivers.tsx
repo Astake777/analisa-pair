@@ -24,9 +24,10 @@ const arrow = (n: number) => (n > 0 ? '▲' : n < 0 ? '▼' : '')
 const dc = (n: number) => (n > 0 ? 'up' : n < 0 ? 'down' : 'flat')
 
 // Daftar tetap aset yang ikut bergerak saat news USD. terbalik = naik menekan emas, searah = naik mendorong emas.
-// US 2Y yield dilewati: simbol Yahoo yang ada (2YY=F) tidak lagi mengirim data intraday.
+// Yield 2Y tidak tersedia live di Yahoo (2YY=F berhenti); futures T-Note 2Y dipakai, harganya kebalikan yield.
 export const ASET: Aset[] = [
   { sym: '^TNX', label: 'US10Y yield', relasi: 'terbalik' },
+  { sym: 'ZT=F', label: 'T-Note 2Y (harga)', relasi: 'searah' },
   { sym: 'DX-Y.NYB', label: 'DXY', relasi: 'terbalik' },
   { sym: 'EURUSD=X', label: 'EURUSD', relasi: 'searah' },
   { sym: 'JPY=X', label: 'USDJPY', relasi: 'terbalik' },
