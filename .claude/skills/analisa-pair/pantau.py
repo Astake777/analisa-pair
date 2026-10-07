@@ -8,7 +8,8 @@ Aturan setup:
   - batal kalau belum terisi dan harga sudah BATAL_FRAC (70%) jalan ke TP1, atau limit lewat EXPIRE_S strategi;
   - setup searah yang zonanya berdekatan (< DEKAT dollar) hanya disimpan satu: lulus validasi dulu, lalu skor,
     lalu yang paling dekat harga; buy dan sell bersamaan -> hanya yang searah EMA20/50 1H;
-  - setiap strategi diberi label SETUP VALID atau uji coba dari laporan validasi.py terbaru.
+  - setiap strategi diberi label SETUP VALID atau uji coba dari laporan validasi.py terbaru; strategi yang
+    expectancy OOS-nya <= 0 atau belum divalidasi tidak dikabarkan.
 State: data/pantau_<PAIR>.json. Self-check: python pantau.py --selftest
 """
 import datetime as dt
@@ -74,15 +75,15 @@ def info_validasi(nama):
     files = sorted(f for f in glob.glob(os.path.join(ROOT, "data", "backtest", "validasi", f"{nama}_*.json"))
                    if not f.endswith("_trades.json"))
     if not files:
-        return {"valid": False, "teks": "Belum divalidasi. Pakai lot kecil."}
+        return {"valid": False, "layak": False, "teks": "Belum divalidasi."}
     rep = json.load(open(files[-1], encoding="utf-8"))
     m = rep["oos"]
     if not m["trades"]:
-        return {"valid": False, "teks": "Validasi belum punya trade OOS. Pakai lot kecil."}
+        return {"valid": False, "layak": False, "teks": "Validasi belum punya trade OOS."}
     angka = f"OOS {m['trades']} trade, menang {m['winrate'] * 100:.0f}%, {m['expectancy']:+.2f}R per trade"
     if rep["valid"]:
-        return {"valid": True, "teks": f"Lulus validasi: {angka}."}
-    return {"valid": False, "teks": f"Belum lulus validasi ({angka}). Pakai lot kecil."}
+        return {"valid": True, "layak": True, "teks": f"Lulus validasi: {angka}."}
+    return {"valid": False, "layak": m["expectancy"] > 0, "teks": f"Belum lulus validasi ({angka}). Pakai lot kecil."}
 
 
 def tp2(s, h1):
@@ -235,6 +236,8 @@ def putaran(pair, state, now=None, publikasi=True):
         mod = importlib.import_module(f"strategi.{nama}")
         exp_s = getattr(mod, "EXPIRE_S", 3600)
         info = info_validasi(nama)
+        if not info["layak"]:
+            continue  # strategi yang OOS-nya rugi atau belum teruji tidak dikabarkan sama sekali
         for s in mod.signals(closed, MODE):
             i = sid(nama, s)
             if s["time"] < now - exp_s or i in state["seen"]:
@@ -297,7 +300,7 @@ def uji(pair):
     e = r2(price + 5)
     s = {"time": int(time.time()), "side": "sell", "entry": e, "sl": r2(e + 3.5), "tp": [r2(e - 10.5)],
          "zona": [e, r2(e + 2)], "alasan": "UJI notifikasi"}
-    k = {**kartu("sniper", s, by["1h"], {"valid": False, "teks": "UJI NOTIFIKASI, abaikan. Hilang dalam 2 menit."})}
+    k = {**kartu("sniper", s, by["1h"], {"valid": False, "layak": True, "teks": "UJI NOTIFIKASI, abaikan. Hilang dalam 2 menit."})}
     publish.insert_analysis(pair, MODE, susun(old, [k], price, int(time.time())))
     print("UJI " + baris("SETUP", k), flush=True)
     time.sleep(120)

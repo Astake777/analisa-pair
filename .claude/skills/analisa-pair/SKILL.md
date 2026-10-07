@@ -86,6 +86,11 @@ Website lokal: `cd web && npm run dev` lalu buka http://localhost:5180 (harga li
 
 Untuk analisis berkala: `/loop 30m /analisa-pair XAUUSD intraday`. Harga di website sudah live sendiri, jadi `/loop` hanya untuk memperbarui analisis.
 
+### Validasi sebelum mengabarkan setup
+- `python .claude/skills/analisa-pair/validasi.py <strategi>`: walk-forward 90 hari IS / 30 hari OOS di data 200 hari, fill harus tembus $0.10, order batal kalau harga sudah 70% ke TP1 tanpa entry, biaya 2x, parameter tetangga. Label **SETUP VALID** hanya kalau semua syarat `KRITERIA` lulus.
+- Hasil 8 Okt 2026: `sniper` (POI 15m + level MSNR fresh + sweep/CHoCH 1m) OOS 18 trade, menang 44%, +0.79R, lolos 6/7 (kurang jumlah trade) → dikabarkan sebagai uji coba. `alchemist_crt` OOS −0.41R dan `alchemist_london` hampir tidak pernah terisi → **tidak dikabarkan**. Jalankan ulang validasi tiap minggu atau setelah aturan strategi berubah.
+- Jangan pernah mengabarkan setup dari strategi yang expectancy OOS-nya ≤ 0, walau diminta "cari setup": jawab bahwa belum ada setup yang teruji.
+
 ### Sniper (scalp, uji coba) dan kabar otomatis
 - Aturan (`strategi/sniper.py`): zona supply/demand 15m (OB + displacement 1.5x ATR + FVG, skor konfluensi ≥1) searah bias 1H+30m. Saat harga masuk zona, tunggu sweep lalu CHoCH 1m. SL = ujung sweep ± 0.5; zona entry 20 pips; SL 35 pips dari tepi pertama; TP1 ≥ 100 pips dan ≥ 3R. 1 pip = $0.10.
 - Backtest: `python strategi/sniper.py --sweep scalp` (corong sinyal + IS/OOS). Hasil 8 Okt 2026: 12 trade/60 hari, 7 menang. Selalu tandai **uji coba** sampai OOS ≥ 15 trade dan expectancy > 0.
