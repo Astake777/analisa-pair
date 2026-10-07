@@ -1,10 +1,14 @@
 """Gabungkan analisis Claude + candle + driver + kalender -> dokumen dashboard.
 
-Pakai:  python snapshot.py <PAIR> <analysis.json> [outdir]
-  Menulis <outdir>/doc.json (untuk pairs/<PAIR>) dan <outdir>/history.json
-  (untuk pairs/<PAIR>/history/<id>), lalu mencetak ringkasan + id history.
-  analysis.json wajib berisi: status, keyakinan, bias, levels, zones, setups.
-  Opsional: gaya, makroKonfirmasi, headlines, notes, events, updatedAt, price.
+Pakai:
+  python snapshot.py <PAIR> <analysis.json> [outdir]   analisis lengkap
+  python snapshot.py <PAIR> --pantau [outdir]          hanya candle + harga (untuk /loop)
+Keluaran di outdir:
+  doc.json          -> pairs/<PAIR>                (analisis lengkap)
+  history.json      -> pairs/<PAIR>/history/<id>   (analisis lengkap)
+  price.json        -> update pairs/<PAIR>         (mode pantau: price, priceAt)
+  candles_<tf>.json -> pairs/<PAIR>/candles/<tf>   (keduanya)
+analysis.json wajib berisi: status, keyakinan, bias, levels, zones, setups.
 Self-check: python snapshot.py --selftest
 """
 import datetime as dt
@@ -28,7 +32,8 @@ DRIVERS = {
     "US100": [("^TNX", "US10Y", "terbalik"), ("DX-Y.NYB", "DXY", "terbalik"), ("^VIX", "VIX", "terbalik")],
 }
 REQUIRED = ("status", "keyakinan", "bias", "levels", "zones", "setups")
-MAX_BYTES = 250_000  # batas dokumen db 256 KiB, sisakan ruang
+# jumlah candle per dokumen chart; tiap dokumen < 256 KiB
+CANDLE_KEEP = {"1m": 1440, "5m": 864, "15m": 672, "30m": 480, "1h": 720, "4h": 400}
 
 
 def yahoo(sym, interval, rng):
@@ -57,22 +62,30 @@ def driver(sym, label, relasi, payload):
             "series": series}
 
 
-def build(pair, analysis, price_payload, driver_payloads, events):
+def candle_doc(tf, rows):
+    keep = rows[-CANDLE_KEEP[tf]:]
+    return {"tf": tf, "rows": [[r[0]] + [round(x, 2) for x in r[1:5]] for r in keep]}
+
+
+def now_iso():
+    return dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def build(pair, analysis, price, driver_payloads, events):
     missing = [k for k in REQUIRED if k not in analysis]
     if missing:
         raise ValueError(f"analysis.json kurang field: {missing}")
     doc = dict(analysis)
     doc["pair"] = pair
     doc["priceSymbol"] = PRICE_SYM[pair]
-    doc["updatedAt"] = analysis.get("updatedAt") or dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    doc["candles"] = candles(price_payload)
-    doc.setdefault("price", doc["candles"][-1][4])
+    doc["updatedAt"] = analysis.get("updatedAt") or now_iso()
+    doc["price"] = price
+    doc["priceAt"] = now_iso()
     doc["drivers"] = [driver(s, lab, rel, p) for (s, lab, rel), p in zip(DRIVERS[pair], driver_payloads) if p]
     doc.setdefault("events", events)
     doc.setdefault("headlines", [])
     doc.setdefault("notes", [])
-    while len(json.dumps(doc)) > MAX_BYTES and len(doc["candles"]) > 50:
-        doc["candles"] = doc["candles"][20:]  # buang candle tertua dulu
+    doc.pop("candles", None)  # candle sekarang di pairs/<PAIR>/candles/<tf>
     main = doc["setups"][0] if doc["setups"] else {}
     hist = {"updatedAt": doc["updatedAt"], "price": doc["price"], "status": doc["status"],
             "keyakinan": doc["keyakinan"], "side": main.get("side"), "entry": main.get("entry"),
@@ -98,24 +111,41 @@ def _selftest():
     assert d["last"] == 34.0 and d["chg"] == 24.0 and d["relasi"] == "terbalik", d
     a = {"status": "TUNGGU NEWS", "keyakinan": "sedang", "bias": {}, "levels": [], "zones": [],
          "setups": [{"side": "sell", "entry": 4225.5, "sl": 4249, "tp": [4131, 4088]}],
-         "updatedAt": "2026-10-07T08:23:00Z"}
-    doc, hist, hid = build("XAUUSD", a, _fixture([4150.0, 4158.5]), [_fixture([5.3, 5.27])] * 4, [])
-    assert doc["price"] == 4158.5 and len(doc["drivers"]) == 4 and doc["priceSymbol"] == "GC=F", doc
+         "updatedAt": "2026-10-07T08:23:00Z", "candles": [[1, 1, 1, 1, 1]]}
+    doc, hist, hid = build("XAUUSD", a, 4158.5, [_fixture([5.3, 5.27])] * 4, [])
+    assert doc["price"] == 4158.5 and len(doc["drivers"]) == 4 and "candles" not in doc, doc
     assert hid == "202610070823" and hist["side"] == "sell" and hist["sl"] == 4249, hist
     try:
-        build("XAUUSD", {"status": "x"}, _fixture([1.0]), [], [])
+        build("XAUUSD", {"status": "x"}, 1.0, [], [])
         raise AssertionError("harus gagal tanpa field wajib")
     except ValueError as e:
         assert "keyakinan" in str(e)
-    big = build("XAUUSD", a, _fixture([4000.0 + i % 50 for i in range(20000)]), [], [])[0]
-    assert len(json.dumps(big)) <= MAX_BYTES and big["candles"][-1][4] == 4000.0 + 19999 % 50
+    rows = [[i * 60, 4000.123, 4001.456, 3999.0, 4000.5, 9] for i in range(2000)]
+    cd = candle_doc("1m", rows)
+    assert len(cd["rows"]) == 1440 and cd["rows"][-1] == [1999 * 60, 4000.12, 4001.46, 3999.0, 4000.5], cd["rows"][-1]
+    assert len(json.dumps(cd)) < 250_000
     print("selftest OK")
 
 
-def main(pair, analysis_path, outdir="."):
+def write_candles(pair, outdir):
+    import data
+    rows = data.load(pair, list(CANDLE_KEEP), refresh=True)
+    for tf, r in rows.items():
+        with open(os.path.join(outdir, f"candles_{tf}.json"), "w", encoding="utf-8") as f:
+            json.dump(candle_doc(tf, r), f)
+    return rows["1m"][-1][4], {tf: len(candle_doc(tf, r)["rows"]) for tf, r in rows.items()}
+
+
+def main(pair, arg, outdir="."):
     pair = pair.upper()
-    analysis = json.load(open(analysis_path, encoding="utf-8"))
-    price_payload = yahoo(PRICE_SYM[pair], "60m", "1mo")
+    os.makedirs(outdir, exist_ok=True)
+    price, counts = write_candles(pair, outdir)
+    if arg == "--pantau":
+        with open(os.path.join(outdir, "price.json"), "w", encoding="utf-8") as f:
+            json.dump({"price": price, "priceAt": now_iso()}, f)
+        print(json.dumps({"price": price, "candles": counts}, indent=2))
+        return
+    analysis = json.load(open(arg, encoding="utf-8"))
     drv = []
     for sym, _, _ in DRIVERS[pair]:
         try:
@@ -128,13 +158,11 @@ def main(pair, analysis_path, outdir="."):
     except Exception as e:
         print(f"kalender gagal: {e}", file=sys.stderr)
         events = []
-    doc, hist, hid = build(pair, analysis, price_payload, drv, events)
-    os.makedirs(outdir, exist_ok=True)
+    doc, hist, hid = build(pair, analysis, price, drv, events)
     for name, body in (("doc.json", doc), ("history.json", hist)):
         with open(os.path.join(outdir, name), "w", encoding="utf-8") as f:
             json.dump(body, f, ensure_ascii=False)
-    print(json.dumps({"doc": os.path.join(outdir, "doc.json"), "history": os.path.join(outdir, "history.json"),
-                      "historyId": hid, "bytes": len(json.dumps(doc)), "candles": len(doc["candles"]),
+    print(json.dumps({"historyId": hid, "bytes": len(json.dumps(doc)), "price": price, "candles": counts,
                       "drivers": [d["label"] for d in doc["drivers"]], "events": len(doc["events"])}, indent=2))
 
 
