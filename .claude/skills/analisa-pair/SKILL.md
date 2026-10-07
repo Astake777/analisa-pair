@@ -117,3 +117,12 @@ Tulis ke user: arah lean, kekuatan, indikator yang mendukung, dan **apa yang mem
 Kalau statusnya NO TRADE atau TUNGGU, tetap tulis zona dan harga yang ditunggu, supaya user tahu kapan setup jadi valid.
 
 Jangan menulis keyakinan "tinggi" kalau ada konflik antara TF besar, makro, atau berita. Ini analisis teknikal, bukan nasihat keuangan.
+
+## 8. Publikasi ke dashboard
+
+Dashboard: https://claude.ai/artifact/Hazuwf8mMtn4rtm4biEAKH (database: `pairs/<PAIR>` + `pairs/<PAIR>/history/<id>`).
+
+1. Tulis hasil analisis ke `<scratchpad>/analysis.json`. Field wajib: `status`, `keyakinan`, `bias` (`{TF: {bias, rsi, catatan}}`), `levels` (`[{price, label, kind}]`, kind: resistance/support/zona-sell/zona-buy), `zones` (`[{lo, hi, side, label}]`), `setups` (output `entry.py` + `label`, `trigger`, `batal`). Opsional: `gaya`, `makroKonfirmasi`, `prediksiNews` (`[{event, waktuWIB, arah, kekuatan, alasan, batal}]`), `headlines` (`[{title, url, published, bacaan}]`), `notes`, `updatedAt`.
+2. `python .claude/skills/analisa-pair/snapshot.py <PAIR> <scratchpad>/analysis.json <scratchpad>/out` → menambahkan candle 60m 1 bulan, driver, dan kalender, lalu mencetak `historyId`.
+3. `ArtifactData` `batch` ke URL di atas: `set pairs/<PAIR>` dari `out/doc.json` dan `set pairs/<PAIR>/history/<historyId>` dari `out/history.json`. Kalau `pairs/<PAIR>` sudah ada, baca dulu (`get`) lalu kirim `if_version`.
+4. Kalau publikasi gagal, analisis di chat tetap dikirim. Sebutkan bahwa dashboard belum diperbarui.
