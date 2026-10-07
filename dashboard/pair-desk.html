@@ -1,0 +1,700 @@
+<title>Analisa Pair</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* Terminal analisis: header harga + chart dengan rail setup di kanan, lalu driver, bias, kalender, riwayat. Gelap dulu, terang mengikuti tema viewer. */
+:root {
+  color-scheme: dark;
+  --bg: #0b0e11;
+  --card: #1e2329;
+  --raised: #2b3139;
+  --line: #2b3139;
+  --ink: #eaecef;
+  --ink-strong: #ffffff;
+  --muted: #929aa5;
+  --accent: #fcd535;
+  --accent-text: #fcd535;
+  --on-accent: #181a20;
+  --up: #0ecb81;
+  --down: #ff5c6f;
+  --info: #3b82f6;
+  --ema20: #3987e5;
+  --ema50: #d55181;
+  --ema200: #929aa5;
+  --zone-sell: rgba(255, 92, 111, 0.13);
+  --zone-buy: rgba(14, 203, 129, 0.13);
+  --font-ui: "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-num: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --r-sm: 4px; --r-md: 6px; --r-lg: 8px; --r-xl: 12px;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    color-scheme: light;
+    --bg: #f5f5f5; --card: #ffffff; --raised: #f5f5f5; --line: #eaecef;
+    --ink: #181a20; --ink-strong: #000000; --muted: #5e6673;
+    --accent-text: #866500; --up: #05875a; --down: #cf304a;
+    --ema20: #2a78d6; --ema50: #e87ba4; --ema200: #5e6673;
+    --zone-sell: rgba(207, 48, 74, 0.10); --zone-buy: rgba(5, 135, 90, 0.10);
+  }
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f5f5f5; --card: #ffffff; --raised: #f5f5f5; --line: #eaecef;
+  --ink: #181a20; --ink-strong: #000000; --muted: #5e6673;
+  --accent-text: #866500; --up: #05875a; --down: #cf304a;
+  --ema20: #2a78d6; --ema50: #e87ba4; --ema200: #5e6673;
+  --zone-sell: rgba(207, 48, 74, 0.10); --zone-buy: rgba(5, 135, 90, 0.10);
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink);
+  font: 400 14px/1.5 var(--font-ui);
+  padding-inline: 16px; padding-block: 0 48px;
+}
+.wrap { max-width: 1360px; margin-inline: auto; display: grid; gap: 16px; }
+.num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+h1, h2, h3 { margin: 0; font-weight: 700; text-wrap: balance; }
+h2 { font-size: 16px; color: var(--ink-strong); }
+a { color: var(--accent-text); }
+button, input { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--info); outline-offset: 2px; }
+
+/* top bar */
+.bar {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5;
+  background: var(--bg); border-bottom: 1px solid var(--line);
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px;
+  padding-block: 10px; margin-inline: -16px; padding-inline: 16px;
+}
+.brand { font-weight: 800; font-size: 15px; color: var(--ink-strong); letter-spacing: -0.2px; }
+.brand b { color: var(--accent-text); }
+.tabs { display: flex; gap: 4px; flex-wrap: wrap; }
+.tab {
+  min-height: 36px; padding: 6px 14px; border-radius: var(--r-md);
+  border: 1px solid var(--line); background: transparent; cursor: pointer; font-weight: 600;
+}
+.tab[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.bar .spacer { flex: 1; }
+.fresh { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.fresh .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--up); }
+.fresh.stale .dot { background: var(--accent); }
+.fresh.stale { color: var(--accent-text); }
+
+/* hero */
+.hero { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px 24px; align-items: end; padding-top: 8px; }
+.pair { font-size: 13px; color: var(--muted); font-weight: 600; }
+.price { font-size: clamp(32px, 6vw, 48px); font-weight: 700; color: var(--ink-strong); letter-spacing: -0.5px; line-height: 1.1; }
+.chg { font-size: 15px; font-weight: 600; margin-left: 8px; }
+.up { color: var(--up); } .down { color: var(--down); } .flat { color: var(--muted); }
+.sub { color: var(--muted); font-size: 13px; }
+.status-block { display: grid; gap: 6px; justify-items: end; text-align: right; }
+.pill {
+  display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px;
+  border-radius: 999px; font-weight: 700; font-size: 13px; border: 1px solid currentColor;
+}
+.pill.wait { color: var(--accent-text); }
+.pill.go { color: var(--info); }
+.pill.none { color: var(--muted); }
+.pill svg { width: 14px; height: 14px; }
+
+/* main grid */
+.main { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; align-items: start; }
+.card { background: var(--card); border-radius: var(--r-xl); padding: 16px; min-width: 0; }
+.card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: var(--r-md); overflow: hidden; }
+.seg button { min-height: 36px; min-width: 44px; padding: 4px 12px; background: transparent; border: 0; cursor: pointer; font-weight: 600; }
+.seg button[aria-pressed="true"] { background: var(--raised); color: var(--ink-strong); }
+.readout { font-size: 12px; color: var(--muted); display: flex; gap: 12px; flex-wrap: wrap; min-height: 18px; }
+.readout b { color: var(--ink); font-weight: 500; }
+#chart { height: clamp(320px, 52vh, 520px); width: 100%; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--muted); margin-top: 10px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 14px; height: 2px; border-radius: 1px; display: inline-block; }
+.sw.dash { background: repeating-linear-gradient(90deg, var(--ema200) 0 4px, transparent 4px 7px); }
+.sw.box { height: 10px; width: 14px; border-radius: 2px; }
+
+.rail { display: grid; gap: 16px; }
+.setup { border: 1px solid var(--line); border-radius: var(--r-lg); padding: 12px; display: grid; gap: 10px; }
+.setup + .setup { margin-top: 10px; }
+.setup.on { border-color: var(--accent); }
+.setup-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.side { font-weight: 800; font-size: 15px; letter-spacing: 0.3px; }
+.side.sell { color: var(--down); } .side.buy { color: var(--up); }
+.setup .st { font-size: 12px; color: var(--muted); font-weight: 600; text-align: right; }
+.kv { display: grid; grid-template-columns: auto 1fr auto; gap: 4px 12px; font-size: 13px; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; text-align: right; }
+.kv .rr { color: var(--muted); font-size: 12px; text-align: right; }
+.setup p { margin: 0; font-size: 13px; }
+.setup p span { color: var(--muted); }
+.show-btn {
+  justify-self: start; min-height: 36px; padding: 6px 12px; border-radius: var(--r-md);
+  background: var(--raised); border: 0; cursor: pointer; font-weight: 600; font-size: 13px;
+}
+.setup.on .show-btn { background: var(--accent); color: var(--on-accent); }
+
+.news-item { border-top: 1px solid var(--line); padding-top: 10px; display: grid; gap: 4px; }
+.news-item:first-of-type { border-top: 0; padding-top: 0; }
+.news-item + .news-item { margin-top: 10px; }
+.news-when { font-size: 12px; color: var(--muted); }
+.news-title { font-weight: 700; color: var(--ink-strong); }
+.lean { font-weight: 700; }
+.news-item p { margin: 0; font-size: 13px; }
+
+/* drivers */
+.drivers { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+.drv { display: grid; gap: 6px; }
+.drv-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.drv-name { font-weight: 700; color: var(--ink-strong); }
+.drv-val { font-size: 18px; font-weight: 600; color: var(--ink-strong); }
+.drv svg { width: 100%; height: 44px; display: block; }
+.tag { font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: var(--r-sm); background: var(--raised); justify-self: start; }
+.tag.pro { color: var(--up); } .tag.con { color: var(--down); } .tag.ctx { color: var(--muted); }
+
+/* lower grid */
+.lower { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; align-items: start; }
+.span2 { grid-column: span 2; }
+.tbl-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th { text-align: left; color: var(--muted); font-weight: 600; font-size: 12px; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+td { padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+td.r, th.r { text-align: right; }
+tr:last-child td { border-bottom: 0; }
+.levels { list-style: none; margin: 0; padding: 0; display: grid; }
+.levels li { display: grid; grid-template-columns: 96px 1fr; gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+.levels li:last-child { border-bottom: 0; }
+.levels li.now { color: var(--accent-text); font-weight: 700; }
+.levels li.zone-sell .num { color: var(--down); }
+.levels li.zone-buy .num { color: var(--up); }
+.list { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: 13px; }
+.hl { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+.hl li { display: grid; gap: 2px; font-size: 13px; }
+.hl .meta { color: var(--muted); font-size: 12px; }
+
+/* states */
+.state { padding: 48px 16px; text-align: center; display: grid; gap: 8px; justify-items: center; }
+.state h2 { font-size: 20px; }
+.state p { margin: 0; color: var(--muted); max-width: 52ch; }
+.state code { font-family: var(--font-num); color: var(--accent-text); background: var(--raised); padding: 2px 6px; border-radius: var(--r-sm); }
+.spin { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--accent); animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
+.offset { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+.offset input { width: 88px; min-height: 36px; padding: 4px 8px; border-radius: var(--r-md); border: 1px solid var(--line); background: var(--card); font-family: var(--font-num); }
+.foot { color: var(--muted); font-size: 12px; }
+
+@media (max-width: 1100px) {
+  .main { grid-template-columns: minmax(0, 1fr); }
+  .rail { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+  .lower { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .span2 { grid-column: span 2; }
+}
+@media (max-width: 640px) {
+  .hero { grid-template-columns: minmax(0, 1fr); }
+  .status-block { justify-items: start; text-align: left; }
+  .lower { grid-template-columns: minmax(0, 1fr); }
+  .span2 { grid-column: auto; }
+  .card { padding: 12px; }
+  .bar .spacer { display: none; }
+}
+</style>
+
+<div class="wrap">
+  <header class="bar">
+    <div class="brand">Analisa <b>Pair</b></div>
+    <div class="tabs" id="tabs" role="group" aria-label="Pilih pair"></div>
+    <div class="spacer"></div>
+    <label class="offset" for="offset">Selisih ke harga broker
+      <input id="offset" type="number" step="0.1" inputmode="decimal" value="0">
+    </label>
+    <div class="fresh" id="fresh" aria-live="polite"><span class="dot"></span><span id="freshText">Menunggu data</span></div>
+  </header>
+
+  <section id="stateBox" class="card state" aria-live="polite">
+    <div class="spin" aria-hidden="true"></div>
+    <h2>Menghubungkan ke data analisis</h2>
+    <p>Hasil terakhir dari <code>/analisa-pair</code> akan muncul di sini.</p>
+  </section>
+
+  <div id="desk" hidden>
+    <section class="hero">
+      <div>
+        <div class="pair" id="pairLabel"></div>
+        <div><span class="price num" id="price"></span><span class="chg num" id="chg"></span></div>
+        <div class="sub" id="heroSub"></div>
+      </div>
+      <div class="status-block">
+        <span class="pill" id="status"></span>
+        <span class="sub" id="conf"></span>
+      </div>
+    </section>
+
+    <div class="main" style="margin-top:16px">
+      <section class="card" aria-labelledby="chartTitle">
+        <div class="card-head">
+          <h2 id="chartTitle">Chart dan zona entry</h2>
+          <div class="seg" role="group" aria-label="Timeframe">
+            <button type="button" data-tf="1H" aria-pressed="true">1H</button>
+            <button type="button" data-tf="4H" aria-pressed="false">4H</button>
+          </div>
+        </div>
+        <div class="readout num" id="readout"></div>
+        <div id="chart" role="img" aria-label="Chart candlestick dengan EMA, zona entry, entry, stop loss dan target"></div>
+        <div class="legend" id="legend">
+          <span><i class="sw" style="background:var(--ema20)"></i>EMA 20</span>
+          <span><i class="sw" style="background:var(--ema50)"></i>EMA 50</span>
+          <span><i class="sw dash"></i>EMA 200</span>
+          <span><i class="sw box" style="background:var(--zone-sell);outline:1px solid var(--down)"></i>Zona sell</span>
+          <span><i class="sw box" style="background:var(--zone-buy);outline:1px solid var(--up)"></i>Zona buy</span>
+          <span><i class="sw" style="background:var(--accent)"></i>Entry</span>
+          <span><i class="sw" style="background:var(--down)"></i>Stop loss</span>
+          <span><i class="sw" style="background:var(--up)"></i>Target</span>
+        </div>
+      </section>
+
+      <aside class="rail">
+        <section class="card" aria-labelledby="setupTitle">
+          <div class="card-head"><h2 id="setupTitle">Setup</h2></div>
+          <div id="setups"></div>
+        </section>
+        <section class="card" aria-labelledby="newsTitle">
+          <div class="card-head"><h2 id="newsTitle">Prediksi news</h2></div>
+          <div id="leans"></div>
+        </section>
+      </aside>
+    </div>
+
+    <section class="card" aria-labelledby="drvTitle" style="margin-top:16px">
+      <div class="card-head"><h2 id="drvTitle">Indeks pendukung</h2><span class="sub">Perubahan 24 jam, terhadap setup yang tampil di chart</span></div>
+      <div class="drivers" id="drivers"></div>
+    </section>
+
+    <div class="lower" style="margin-top:16px">
+      <section class="card" aria-labelledby="biasTitle">
+        <div class="card-head"><h2 id="biasTitle">Bias per timeframe</h2></div>
+        <div class="tbl-wrap"><table><thead><tr><th>TF</th><th>Bias</th><th class="r">RSI</th></tr></thead><tbody id="bias"></tbody></table></div>
+        <p class="sub" id="makro" style="margin:12px 0 0"></p>
+      </section>
+      <section class="card" aria-labelledby="lvlTitle">
+        <div class="card-head"><h2 id="lvlTitle">Level kunci</h2></div>
+        <ul class="levels" id="levels"></ul>
+      </section>
+      <section class="card" aria-labelledby="noteTitle">
+        <div class="card-head"><h2 id="noteTitle">Catatan</h2></div>
+        <ul class="list" id="notes"></ul>
+      </section>
+      <section class="card span2" aria-labelledby="calTitle">
+        <div class="card-head"><h2 id="calTitle">Kalender USD</h2><span class="sub">Waktu WIB. A = actual, F = forecast, P = previous</span></div>
+        <div class="tbl-wrap"><table><thead><tr><th>Waktu</th><th>Event</th><th class="r">A</th><th class="r">F</th><th class="r">P</th><th>Arah</th></tr></thead><tbody id="cal"></tbody></table></div>
+      </section>
+      <section class="card" aria-labelledby="hlTitle">
+        <div class="card-head"><h2 id="hlTitle">Berita</h2></div>
+        <ul class="hl" id="headlines"></ul>
+      </section>
+      <section class="card span2" aria-labelledby="histTitle" style="grid-column:1 / -1">
+        <div class="card-head"><h2 id="histTitle">Riwayat analisis</h2></div>
+        <div class="tbl-wrap"><table><thead><tr><th>Waktu</th><th>Status</th><th>Arah</th><th class="r">Harga</th><th class="r">Entry</th><th class="r">SL</th><th class="r">TP</th><th>Keyakinan</th></tr></thead><tbody id="hist"></tbody></table></div>
+      </section>
+    </div>
+    <p class="foot" style="margin-top:16px">Harga memakai futures emas (GC=F). Isi selisih ke harga broker di atas supaya chart dan level cocok dengan platformmu. Ini analisis teknikal, bukan nasihat keuangan.</p>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.3/dist/lightweight-charts.standalone.production.js"></script>
+<script>
+(() => {
+  const WIB = 7 * 3600;
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const fmt = (n, d = 1) => (n == null || isNaN(n)) ? "–" : Number(n).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
+  const store = {
+    get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+  };
+
+  const state = { pairs: {}, pair: null, tf: "1H", setupIdx: 0, history: [], unsubHist: null };
+
+  // ---- chart ----
+  const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  let chart, candleSeries, ema20, ema50, ema200, zonePrim, priceLines = [];
+
+  class ZoneBands {
+    constructor() { this.zones = []; this.series = null; this.requestUpdate = null; }
+    attached({ series, requestUpdate }) { this.series = series; this.requestUpdate = requestUpdate; }
+    detached() { this.series = null; }
+    setZones(z) { this.zones = z; this.requestUpdate && this.requestUpdate(); }
+    updateAllViews() {}
+    paneViews() {
+      const self = this;
+      return [{
+        zOrder: () => "bottom",
+        renderer: () => ({
+          draw(target) {
+            if (!self.series) return;
+            target.useBitmapCoordinateSpace((scope) => {
+              const ctx = scope.context, w = scope.bitmapSize.width, vr = scope.verticalPixelRatio, hr = scope.horizontalPixelRatio;
+              for (const z of self.zones) {
+                const y1 = self.series.priceToCoordinate(z.hi), y2 = self.series.priceToCoordinate(z.lo);
+                if (y1 == null || y2 == null) continue;
+                const top = Math.min(y1, y2) * vr, h = Math.max(Math.abs(y2 - y1) * vr, 2 * vr);
+                ctx.fillStyle = z.side === "sell" ? css("--zone-sell") : css("--zone-buy");
+                ctx.fillRect(0, top, w, h);
+                ctx.fillStyle = z.side === "sell" ? css("--down") : css("--up");
+                ctx.fillRect(0, top, w, 1 * vr);
+                ctx.fillRect(0, top + h - 1 * vr, w, 1 * vr);
+                ctx.font = `${600} ${11 * hr}px ${css("--font-num")}`;
+                ctx.fillText(z.label, 8 * hr, top - 4 * vr);
+              }
+            });
+          },
+        }),
+      }];
+    }
+  }
+
+  function chartTheme() {
+    return {
+      layout: { background: { type: "solid", color: css("--card") }, textColor: css("--muted"), fontFamily: css("--font-num"), fontSize: 11 },
+      grid: { vertLines: { color: css("--line") }, horzLines: { color: css("--line") } },
+      rightPriceScale: { borderColor: css("--line") },
+      timeScale: { borderColor: css("--line"), timeVisible: true, secondsVisible: false },
+      crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+    };
+  }
+
+  function initChart() {
+    if (chart || !window.LightweightCharts) return;
+    chart = LightweightCharts.createChart($("chart"), { autoSize: true, ...chartTheme() });
+    candleSeries = chart.addCandlestickSeries({ priceLineVisible: false });
+    const line = (color, style) => chart.addLineSeries({ color, lineWidth: 2, lineStyle: style, priceLineVisible: false, lastValueVisible: true, crosshairMarkerVisible: false });
+    ema20 = line(css("--ema20"), 0);
+    ema50 = line(css("--ema50"), 0);
+    ema200 = line(css("--ema200"), 2);
+    zonePrim = new ZoneBands();
+    candleSeries.attachPrimitive(zonePrim);
+    chart.subscribeCrosshairMove((p) => {
+      const d = p && p.seriesData ? p.seriesData.get(candleSeries) : null;
+      showReadout(d || lastBar);
+    });
+    applySeriesColors();
+  }
+
+  function applySeriesColors() {
+    if (!chart) return;
+    chart.applyOptions(chartTheme());
+    candleSeries.applyOptions({ upColor: css("--up"), downColor: css("--down"), wickUpColor: css("--up"), wickDownColor: css("--down"), borderVisible: false });
+    ema20.applyOptions({ color: css("--ema20") });
+    ema50.applyOptions({ color: css("--ema50") });
+    ema200.applyOptions({ color: css("--ema200") });
+    drawLines();
+  }
+
+  let lastBar = null;
+  function showReadout(b) {
+    if (!b) { $("readout").textContent = ""; return; }
+    const t = new Date(b.time * 1000);
+    const when = t.toISOString().slice(5, 16).replace("T", " ");
+    $("readout").innerHTML = `<span>${when} WIB</span><span>O <b>${fmt(b.open)}</b></span><span>H <b>${fmt(b.high)}</b></span><span>L <b>${fmt(b.low)}</b></span><span>C <b>${fmt(b.close)}</b></span>`;
+  }
+
+  function aggregate(rows, sec) {
+    const out = [];
+    for (const [t, o, h, l, c] of rows) {
+      const b = Math.floor(t / sec) * sec;
+      const cur = out[out.length - 1];
+      if (cur && cur.t === b) { cur.h = Math.max(cur.h, h); cur.l = Math.min(cur.l, l); cur.c = c; }
+      else out.push({ t: b, o, h, l, c });
+    }
+    return out;
+  }
+
+  function ema(bars, n) {
+    if (bars.length < n) return [];
+    const k = 2 / (n + 1);
+    let v = bars.slice(0, n).reduce((s, b) => s + b.close, 0) / n;
+    const out = [{ time: bars[n - 1].time, value: v }];
+    for (let i = n; i < bars.length; i++) { v = bars[i].close * k + v * (1 - k); out.push({ time: bars[i].time, value: v }); }
+    return out;
+  }
+
+  const offset = () => Number($("offset").value) || 0;
+
+  function drawChart() {
+    const doc = state.pairs[state.pair];
+    initChart();
+    if (!chart || !doc) return;
+    const off = offset();
+    const rows = doc.candles || [];
+    const agg = state.tf === "4H" ? aggregate(rows, 14400) : rows.map(([t, o, h, l, c]) => ({ t, o, h, l, c }));
+    const bars = agg.map((r) => ({ time: r.t + WIB, open: r.o + off, high: r.h + off, low: r.l + off, close: r.c + off }));
+    candleSeries.setData(bars);
+    ema20.setData(ema(bars, 20));
+    ema50.setData(ema(bars, 50));
+    ema200.setData(ema(bars, 200));
+    lastBar = bars[bars.length - 1] || null;
+    showReadout(lastBar);
+    zonePrim.setZones((doc.zones || []).map((z) => ({ ...z, lo: z.lo + off, hi: z.hi + off })));
+    drawLines();
+    chart.timeScale().fitContent();
+  }
+
+  function drawLines() {
+    if (!candleSeries) return;
+    priceLines.forEach((l) => candleSeries.removePriceLine(l));
+    priceLines = [];
+    const doc = state.pairs[state.pair];
+    if (!doc) return;
+    const off = offset();
+    const add = (price, color, title, style, axis = true) => {
+      if (price == null) return;
+      priceLines.push(candleSeries.createPriceLine({ price: price + off, color, lineWidth: 1, lineStyle: style, axisLabelVisible: axis, title }));
+    };
+    for (const lv of doc.levels || []) {
+      if (lv.kind === "sekarang" || String(lv.kind).startsWith("zona")) continue;
+      add(lv.price, css("--muted"), lv.label, 3, false);
+    }
+    const s = (doc.setups || [])[state.setupIdx];
+    if (s) {
+      add(s.entry, css("--accent"), "Entry", 0);
+      add(s.sl, css("--down"), "SL", 2);
+      (s.tp || []).forEach((tp, i) => add(tp, css("--up"), `TP${i + 1}`, 2));
+    }
+  }
+
+  // ---- panels ----
+  const STATUS_ICON = {
+    wait: '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 4.5V8l2.5 1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>',
+    go: '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M5 8.2l2 2 4-4.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    none: '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M5 8h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>',
+  };
+  const statusKind = (s = "") => /NO TRADE|INVALID/i.test(s) ? "none" : /AKTIF|SIAP/i.test(s) ? "go" : "wait";
+  const dirClass = (a = "") => /SELL/i.test(a) ? "down" : /BUY/i.test(a) ? "up" : "flat";
+
+  function renderTabs() {
+    const names = Object.keys(state.pairs).sort();
+    $("tabs").innerHTML = names.map((p) => `<button type="button" class="tab" data-pair="${esc(p)}" aria-pressed="${p === state.pair}">${esc(p)}</button>`).join("");
+  }
+
+  function age(iso) {
+    const ms = Date.now() - Date.parse(iso);
+    if (!isFinite(ms)) return null;
+    const m = Math.round(ms / 60000);
+    return m < 60 ? `${m} menit lalu` : m < 1440 ? `${Math.round(m / 60)} jam lalu` : `${Math.round(m / 1440)} hari lalu`;
+  }
+
+  function wibTime(iso) {
+    const d = new Date(Date.parse(iso) + WIB * 1000);
+    return isNaN(d) ? "–" : d.toISOString().slice(0, 16).replace("T", " ") + " WIB";
+  }
+
+  function render() {
+    const doc = state.pairs[state.pair];
+    if (!doc) return;
+    const off = offset();
+    $("pairLabel").textContent = `${doc.pair} · ${doc.gaya || "intraday"} · ${doc.priceSymbol || ""}`;
+    $("price").textContent = fmt(doc.price + off);
+    const c = doc.candles || [];
+    const last = c[c.length - 1];
+    const base = last ? [...c].reverse().find((r) => r[0] <= last[0] - 86400) : null;
+    if (last && base) {
+      const d = last[4] - base[4], pct = d / base[4] * 100;
+      $("chg").className = "chg num " + (d > 0 ? "up" : d < 0 ? "down" : "flat");
+      $("chg").textContent = `${d > 0 ? "▲" : d < 0 ? "▼" : ""} ${d > 0 ? "+" : ""}${fmt(d)} (${pct > 0 ? "+" : ""}${fmt(pct, 2)}%) 24j`;
+    } else $("chg").textContent = "";
+    $("heroSub").textContent = `Dianalisis ${wibTime(doc.updatedAt)}`;
+    const kind = statusKind(doc.status);
+    $("status").className = "pill " + kind;
+    $("status").innerHTML = STATUS_ICON[kind] + esc(doc.status);
+    $("conf").textContent = `Keyakinan: ${doc.keyakinan || "–"}`;
+
+    const a = age(doc.updatedAt);
+    const stale = Date.now() - Date.parse(doc.updatedAt) > 2 * 3600 * 1000;
+    $("fresh").classList.toggle("stale", stale);
+    $("freshText").textContent = a ? (stale ? `Data ${a}, jalankan ulang /analisa-pair` : `Diperbarui ${a}`) : "";
+
+    $("setups").innerHTML = (doc.setups || []).map((s, i) => {
+      const tps = (s.tp || []).map((tp, j) => `<dt>TP${j + 1}</dt><dd class="num">${fmt(tp + off)}</dd><dd class="rr num">${s.rr && s.rr[j] != null ? s.rr[j] + "R" : ""}</dd>`).join("");
+      return `<article class="setup${i === state.setupIdx ? " on" : ""}">
+        <div class="setup-top"><span class="side ${s.side === "sell" ? "sell" : "buy"}">${s.side === "sell" ? "SELL" : "BUY"}${s.label ? ` · ${esc(s.label)}` : ""}</span><span class="st">${esc(s.status)}</span></div>
+        <dl class="kv">
+          <dt>Zona</dt><dd class="num" style="grid-column:span 2">${fmt((s.zone || [])[0] + off)} – ${fmt((s.zone || [])[1] + off)}</dd>
+          <dt>Entry</dt><dd class="num" style="grid-column:span 2">${fmt(s.entry + off)}</dd>
+          <dt>SL</dt><dd class="num">${fmt(s.sl + off)}</dd><dd class="rr num">risk ${fmt(s.risk)}</dd>
+          ${tps}
+        </dl>
+        ${s.trigger ? `<p><span>Trigger:</span> ${esc(s.trigger)}</p>` : ""}
+        ${s.batal ? `<p><span>Batal:</span> ${esc(s.batal)}</p>` : ""}
+        <button type="button" class="show-btn" data-setup="${i}" aria-pressed="${i === state.setupIdx}">${i === state.setupIdx ? "Tampil di chart" : "Tampilkan di chart"}</button>
+      </article>`;
+    }).join("") || `<p class="sub">Belum ada setup.</p>`;
+
+    $("leans").innerHTML = (doc.prediksiNews || []).map((n) => `
+      <div class="news-item">
+        <span class="news-when">${esc(n.waktuWIB)}</span>
+        <span class="news-title">${esc(n.event)}</span>
+        <span class="lean ${dirClass(n.arah)}">${esc(n.arah)}${n.kekuatan ? ` · ${esc(n.kekuatan)}` : ""}</span>
+        ${n.alasan ? `<p>${esc(n.alasan)}</p>` : ""}
+        ${n.batal ? `<p class="sub">Batal: ${esc(n.batal)}</p>` : ""}
+      </div>`).join("") || `<p class="sub">Tidak ada event penting dalam jendela analisis.</p>`;
+
+    const side = ((doc.setups || [])[state.setupIdx] || {}).side;
+    $("drivers").innerHTML = (doc.drivers || []).map((d) => {
+      const isYield = d.sym === "^TNX";
+      const val = isYield ? `${fmt(d.last, 3)}%` : fmt(d.last, 2);
+      const chg = isYield ? `${d.chg > 0 ? "+" : ""}${fmt(d.chg * 100, 1)} bp` : `${d.chgPct > 0 ? "+" : ""}${fmt(d.chgPct, 2)}%`;
+      const dc = d.chg > 0 ? "up" : d.chg < 0 ? "down" : "flat";
+      let tag = `<span class="tag ctx">Konteks</span>`;
+      if (d.relasi !== "konteks" && side && d.chg !== 0) {
+        const pairDown = d.relasi === "terbalik" ? d.chg > 0 : d.chg < 0;
+        const pro = (side === "sell") === pairDown;
+        tag = `<span class="tag ${pro ? "pro" : "con"}">${pro ? "Mendukung" : "Melawan"} ${side.toUpperCase()}</span>`;
+      }
+      return `<div class="drv">
+        <div class="drv-top"><span class="drv-name">${esc(d.label)}</span><span class="num ${dc}">${d.chg > 0 ? "▲" : d.chg < 0 ? "▼" : ""} ${chg}</span></div>
+        <span class="drv-val num">${val}</span>
+        ${spark(d.series || [])}
+        ${tag}
+      </div>`;
+    }).join("") || `<p class="sub">Data driver belum tersedia.</p>`;
+
+    const order = ["1W", "1D", "4H", "1H", "15m"];
+    const b = doc.bias || {};
+    $("bias").innerHTML = order.filter((k) => b[k]).map((k) => `<tr><td>${k}</td><td class="${dirClass(/bear|turun|sell/i.test(b[k].bias) ? "SELL" : /bull|naik|buy/i.test(b[k].bias) ? "BUY" : "")}">${esc(b[k].bias)}${b[k].catatan ? `<div class="sub">${esc(b[k].catatan)}</div>` : ""}</td><td class="r num">${b[k].rsi != null ? fmt(b[k].rsi, 1) : "–"}</td></tr>`).join("") || `<tr><td colspan="3" class="sub">Bias belum tersedia.</td></tr>`;
+    $("makro").textContent = doc.makroKonfirmasi || "";
+
+    const lv = [...(doc.levels || []).filter((l) => l.kind !== "sekarang"), { price: doc.price, label: "Harga sekarang", kind: "sekarang" }].sort((x, y) => y.price - x.price);
+    $("levels").innerHTML = lv.map((l) => `<li class="${l.kind === "sekarang" ? "now" : l.kind === "zona-sell" ? "zone-sell" : l.kind === "zona-buy" ? "zone-buy" : ""}"><span class="num">${fmt(l.price + off)}</span><span>${esc(l.label)}</span></li>`).join("");
+
+    $("notes").innerHTML = (doc.notes || []).map((n) => `<li>${esc(n)}</li>`).join("") || `<li class="sub">Tidak ada catatan.</li>`;
+
+    $("cal").innerHTML = (doc.events || []).flatMap((g) => g.items.map((it, i) => `<tr>
+      <td class="num" style="white-space:nowrap">${i === 0 ? esc(g.waktuWIB) : ""}</td>
+      <td>${esc(it.title)}</td>
+      <td class="r num">${it.actual ?? "–"}</td><td class="r num">${it.forecast ?? "–"}</td><td class="r num">${it.previous ?? "–"}</td>
+      <td>${i === 0 ? (g.jenis === "HASIL" ? `<span class="${dirClass(g.arah)}">${esc(g.arah)} · ${esc(g.kekuatan)}</span>` : g.jenis ? `<span class="sub">${esc(g.jenis)}</span>` : "") : ""}</td>
+    </tr>`)).join("") || `<tr><td colspan="6" class="sub">Tidak ada event USD penting dalam 7 hari.</td></tr>`;
+
+    $("headlines").innerHTML = (doc.headlines || []).map((h) => `<li>
+      <a href="${esc(h.url)}" target="_blank" rel="noopener">${esc(h.title)}</a>
+      <span class="meta">${esc((h.published || "").slice(0, 10))}${h.bacaan ? ` · dibaca: ${esc(h.bacaan)}` : ""}</span>
+    </li>`).join("") || `<li class="sub">Tidak ada berita.</li>`;
+
+    renderHistory();
+  }
+
+  function spark(series) {
+    if (series.length < 2) return "";
+    const vals = series.map((p) => p[1]);
+    const min = Math.min(...vals), max = Math.max(...vals), span = max - min || 1;
+    const W = 200, H = 44, pad = 4;
+    const pts = series.map((p, i) => [i / (series.length - 1) * W, pad + (1 - (p[1] - min) / span) * (H - 2 * pad)]);
+    const path = pts.map((p, i) => (i ? "L" : "M") + p[0].toFixed(1) + " " + p[1].toFixed(1)).join(" ");
+    const [ex, ey] = pts[pts.length - 1];
+    return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
+      <line x1="0" x2="${W}" y1="${H / 2}" y2="${H / 2}" stroke="var(--line)" stroke-width="1"/>
+      <path d="${path} L ${W} ${H} L 0 ${H} Z" fill="var(--raised)" opacity="0.6"/>
+      <path d="${path}" fill="none" stroke="var(--muted)" stroke-width="1.5" vector-effect="non-scaling-stroke"/>
+      <circle cx="${ex}" cy="${ey}" r="3" fill="var(--ink-strong)"/>
+    </svg>`;
+  }
+
+  function renderHistory() {
+    const off = offset();
+    $("hist").innerHTML = state.history.map((h) => `<tr>
+      <td class="num" style="white-space:nowrap">${wibTime(h.updatedAt)}</td>
+      <td>${esc(h.status)}</td>
+      <td class="${h.side === "sell" ? "down" : h.side === "buy" ? "up" : ""}">${h.side ? h.side.toUpperCase() : "–"}</td>
+      <td class="r num">${fmt(h.price + off)}</td><td class="r num">${fmt(h.entry + off)}</td><td class="r num">${fmt(h.sl + off)}</td>
+      <td class="r num">${(h.tp || []).map((t) => fmt(t + off)).join(" / ") || "–"}</td>
+      <td>${esc(h.keyakinan)}</td>
+    </tr>`).join("") || `<tr><td colspan="8" class="sub">Belum ada riwayat untuk pair ini.</td></tr>`;
+  }
+
+  function showState(title, body, spinning) {
+    $("desk").hidden = true;
+    $("stateBox").hidden = false;
+    $("stateBox").innerHTML = `${spinning ? '<div class="spin" aria-hidden="true"></div>' : ""}<h2>${esc(title)}</h2><p>${body}</p>`;
+  }
+
+  // ---- data ----
+  let dbRef = null;
+  function selectPair(p) {
+    if (!state.pairs[p]) return;
+    const changed = state.pair !== p;
+    state.pair = p;
+    store.set("pair", p);
+    if (changed) {
+      state.setupIdx = 0;
+      $("offset").value = store.get("offset:" + p) ?? "0";
+      subscribeHistory();
+    }
+    renderTabs();
+    render();
+    drawChart();
+  }
+
+  function subscribeHistory() {
+    state.unsubHist && state.unsubHist();
+    state.history = [];
+    if (!dbRef || !state.pair) return;
+    state.unsubHist = dbRef.collection(`pairs/${state.pair}/history`).orderBy("updatedAt", "desc").limit(20)
+      .onSnapshot((snap) => { state.history = snap.docs.map((d) => d.data()); renderHistory(); }, () => {});
+  }
+
+  async function start() {
+    if (!window.claude || !window.claude.use) {
+      showState("Data analisis tidak tersedia di tampilan ini", "Buka halaman ini di claude.ai dalam keadaan login untuk membaca hasil <code>/analisa-pair</code>.");
+      return;
+    }
+    const db = await window.claude.use("db");
+    if (!db) {
+      showState("Data analisis tidak tersedia di tampilan ini", "Buka halaman ini di claude.ai dalam keadaan login untuk membaca hasil <code>/analisa-pair</code>.");
+      return;
+    }
+    dbRef = db;
+    db.collection("pairs").onSnapshot((snap) => {
+      state.pairs = {};
+      snap.docs.forEach((d) => { if (d.exists) state.pairs[d.id] = d.data(); });
+      const names = Object.keys(state.pairs);
+      if (!names.length) {
+        showState("Belum ada analisis", "Jalankan <code>/analisa-pair XAUUSD</code> di Claude Code. Hasilnya akan langsung muncul di sini.");
+        return;
+      }
+      $("stateBox").hidden = true;
+      $("desk").hidden = false;
+      const want = state.pair && state.pairs[state.pair] ? state.pair : (store.get("pair") && state.pairs[store.get("pair")] ? store.get("pair") : names.sort()[0]);
+      const first = state.pair !== want;
+      state.pair = first ? null : state.pair;
+      selectPair(want);
+    }, (e) => {
+      showState("Data tidak bisa dimuat", `Koneksi ke data analisis terputus (${esc(e && e.code)}). Muat ulang halaman untuk mencoba lagi.`);
+    });
+  }
+
+  // ---- events ----
+  $("tabs").addEventListener("click", (e) => { const b = e.target.closest("[data-pair]"); if (b) selectPair(b.dataset.pair); });
+  document.querySelector(".seg").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-tf]"); if (!b) return;
+    state.tf = b.dataset.tf;
+    document.querySelectorAll(".seg button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+    drawChart();
+  });
+  $("setups").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-setup]"); if (!b) return;
+    state.setupIdx = Number(b.dataset.setup);
+    render(); drawLines();
+  });
+  $("offset").addEventListener("change", () => {
+    if (state.pair) store.set("offset:" + state.pair, $("offset").value);
+    render(); drawChart();
+  });
+  const retheme = () => requestAnimationFrame(applySeriesColors);
+  matchMedia("(prefers-color-scheme: light)").addEventListener("change", retheme);
+  new MutationObserver(retheme).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  setInterval(() => { if (state.pair) render(); }, 60000);
+
+  start();
+})();
+</script>
