@@ -26,8 +26,9 @@ IS_DAYS, OOS_DAYS = 40, 20
 GRID = {}          # nama strategi -> [params, ...] untuk sweep nanti; kosong = PARAMS bawaan
 
 
-def simulasi(rows, sigs, step, expire, cost=COST):
-    """-> list trade. rows = candle TF simulasi, expire dalam candle TF simulasi."""
+def simulasi(rows, sigs, step, expire, cost=COST, tembus=0.0, batal_frac=1.0):
+    """-> list trade. rows = candle TF simulasi, expire dalam candle TF simulasi.
+    Order batal kalau sebelum terisi harga sudah menempuh batal_frac x jarak entry->TP (1.0 = TP tersentuh)."""
     t, o, h, l, c = kolom(rows)
     out, bebas = [], 0
     for s in sorted(sigs, key=lambda s: s["time"]):
@@ -36,12 +37,13 @@ def simulasi(rows, sigs, step, expire, cost=COST):
             continue
         buy = s["side"] == "buy"
         e, sl, tp = s["entry"], s["sl"], s["tp"][0]
+        batal = e + (tp - e) * batal_frac
         fill, worst = None, e
         for k in range(i, min(i + expire, len(t))):
-            if (l[k] <= e) if buy else (h[k] >= e):
+            if (l[k] <= e - tembus) if buy else (h[k] >= e + tembus):
                 fill = k
                 break
-            if (h[k] >= tp) if buy else (l[k] <= tp):
+            if (h[k] >= batal) if buy else (l[k] <= batal):
                 break
         if fill is None:
             bebas = t[k] + step

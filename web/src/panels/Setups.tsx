@@ -1,5 +1,5 @@
-import type { Setup } from '../lib/supabase'
-import { fmt } from '../lib/format'
+import type { LogRow, Setup } from '../lib/supabase'
+import { fmt, wibTime } from '../lib/format'
 
 // Near = live price within 0.5 x (zone height + $6) of the zone midpoint, i.e. inside or within $3 of an edge.
 const NEAR_PAD = 6
@@ -8,7 +8,11 @@ export const nearZone = (price: number, [a, b]: [number, number]) =>
 
 // XAUUSD: 1 pip = $0.10
 const pips = (d: number) => Math.round(Math.abs(d) * 10)
-const SUMBER: Record<string, string> = { sniper: 'Sniper 1m', utama: 'Strategi utama', 'kontra-tren': 'Kontra-tren' }
+const SUMBER: Record<string, string> = {
+  sniper: 'Sniper 1m', utama: 'Strategi utama', 'kontra-tren': 'Kontra-tren',
+  alchemist_crt: 'Alchemist CRT', alchemist_london: 'Alchemist London',
+}
+const BATAL_FRAC = 0.7
 
 // Posisi harga live terhadap zona, dalam kalimat biasa.
 function keadaan(s: Setup, price: number | null, off: number) {
@@ -16,16 +20,33 @@ function keadaan(s: Setup, price: number | null, off: number) {
   const [lo, hi] = (s.zone ?? [s.entry, s.entry]).map((v) => v + off)
   const sl = s.sl + off
   const sell = s.side === 'sell'
+  if (s.hasil) return { text: s.hasil, kind: 'off' }
+  if (s.terisi) return { text: 'Order sudah terisi. Kelola posisi dengan SL dan target di bawah.', kind: 'go' }
   if (sell ? price >= sl : price <= sl) return { text: 'Batal: harga sudah melewati stop loss.', kind: 'off' }
+  const tp1 = s.tp?.[0]
+  // aturan sama dengan pantau.py/validasi.py: batal kalau sudah 70% jalan ke TP1 tanpa entry
+  if (tp1 != null) {
+    const batal = s.entry + off + (tp1 - s.entry) * BATAL_FRAC
+    if (sell ? price <= batal : price >= batal) return { text: 'Batal: harga sudah dekat target tanpa sempat entry.', kind: 'off' }
+  }
   if (price >= lo && price <= hi) return { text: 'Harga di zona. Order limit bisa terisi sekarang.', kind: 'go' }
   const jarak = sell ? lo - price : price - hi
   if (jarak > 0) return { text: `Belum aktif. Harga perlu ${sell ? 'naik' : 'turun'} $${fmt(jarak, 2)} (${pips(jarak)} pips) ke zona.`, kind: 'wait' }
   return { text: 'Harga sudah lewat zona, belum kena stop loss. Jangan kejar.', kind: 'wait' }
 }
 
-type Props = { setups: Setup[]; idx: number; onPick: (i: number) => void; off: number; price: number | null }
+type Props = { setups: Setup[]; idx: number; onPick: (i: number) => void; off: number; price: number | null; log: LogRow[] | null }
 
-export function Setups({ setups, idx, onPick, off, price }: Props) {
+// Ringkasan forward test nyata satu strategi dari setup_log.
+function live(log: LogRow[] | null, strategi?: string) {
+  const done = (log ?? []).filter((x) => x.strategi === strategi && x.terisi && (x.hasil === 'TP' || x.hasil === 'SL'))
+  if (!done.length) return 'Live: belum ada setup yang selesai.'
+  const tp = done.filter((x) => x.hasil === 'TP').length
+  const r = done.reduce((a, x) => a + Number(x.r ?? 0), 0)
+  return `Live: ${done.length} setup selesai, ${tp} kena TP, total ${r >= 0 ? '+' : ''}${r.toFixed(1)}R.`
+}
+
+export function Setups({ setups, idx, onPick, off, price, log }: Props) {
   if (!setups.length) return <p className="sub">Belum ada setup. Sistem mengabari begitu zona yang memenuhi syarat muncul.</p>
   return (
     <>
@@ -55,7 +76,9 @@ export function Setups({ setups, idx, onPick, off, price }: Props) {
               <ol className="steps">{s.langkah.map((x, j) => <li key={j}>{x}</li>)}</ol>
             ) : s.trigger ? <p><span>Syarat masuk:</span> {s.trigger}</p> : null}
             {s.batal && <p><span>Batal kalau:</span> {s.batal}</p>}
-            {s.eksperimen && <p className="exp-tag"><b>Uji coba.</b> {s.eksperimen}</p>}
+            {s.valid ? <p className="exp-tag ok"><b>Lulus validasi.</b> {s.catatanValidasi?.replace(/^Lulus validasi: /, '')}</p>
+              : s.eksperimen && <p className="exp-tag"><b>Uji coba.</b> {s.eksperimen}</p>}
+            {s.sinyalId && <p className="exp-tag">{live(log, s.label)}</p>}
             {setups.length > 1 && (
               <button type="button" className="show-btn" aria-pressed={shown} onClick={() => onPick(i)}>
                 {shown ? 'Sedang tampil di chart' : 'Tampilkan di chart'}
@@ -73,5 +96,33 @@ function Tp({ n, price, rr, pip }: { n: number; price: number; rr?: number; pip:
     <>
       <dt>Target {n}</dt><dd className="num up">{fmt(price, 2)}</dd><dd className="rr num">+{pip} pips{rr != null ? ` · ${rr}R` : ''}</dd>
     </>
+  )
+}
+
+const HASIL: Record<string, string> = { TP: 'TP', SL: 'SL' }
+
+export function RekamJejak({ rows, error }: { rows: LogRow[] | null; error: string | null }) {
+  return (
+    <section className="card" aria-labelledby="logTitle">
+      <div className="card-head"><h2 id="logTitle">Rekam jejak live</h2></div>
+      {error ? (
+        <p className="sub">Tabel rekam jejak belum siap ({error}). Jalankan <code>supabase/migrations/20261008000000_setup_log.sql</code> di SQL Editor Supabase.</p>
+      ) : rows == null ? <p className="sub">Memuat rekam jejak.</p>
+        : !rows.length ? <p className="sub">Belum ada setup yang dikabarkan watcher. Setiap setup baru tercatat di sini sampai kena TP, SL, atau batal.</p>
+        : (
+          <ul className="log">
+            {rows.slice(0, 10).map((x) => (
+              <li key={x.id}>
+                <span className={x.side === 'sell' ? 'down' : 'up'}>{x.side.toUpperCase()}</span>
+                <span className="num">{fmt(x.entry, 2)}</span>
+                <span className="sub">{wibTime(x.dibuat)}</span>
+                <span className={`num ${x.hasil === 'TP' ? 'up' : x.hasil === 'SL' ? 'down' : 'sub'}`}>
+                  {x.hasil ? (HASIL[x.hasil] ?? 'Batal') : x.terisi ? 'Berjalan' : 'Menunggu'}{x.r != null && x.hasil && HASIL[x.hasil] ? ` ${x.r > 0 ? '+' : ''}${x.r}R` : ''}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+    </section>
   )
 }

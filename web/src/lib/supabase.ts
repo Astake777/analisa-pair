@@ -12,6 +12,7 @@ export type Setup = {
   side: Side; label?: string; entry: number; zone?: [number, number]; sl: number; risk?: number
   tp?: number[]; rr?: number[]; status?: string; trigger?: string; batal?: string; eksperimen?: string
   langkah?: string[]; alasan?: { entry?: string; sl?: string; tp?: string }
+  terisi?: boolean; hasil?: string; valid?: boolean; sinyalId?: string; catatanValidasi?: string
 }
 export type Driver = {
   sym: string; label: string; relasi: string; last: number; chg: number; chgPct: number; series?: [number, number][]
@@ -148,5 +149,19 @@ export function useMacro() {
         q<MacroRow>(sb.from('macro_series').select('*').eq('series', s).order('date', { ascending: false }).limit(60))))
       return per.flatMap((r) => r.reverse())
     }),
+  )
+}
+
+export type LogRow = {
+  id: string; strategi: string; side: Side; entry: number; sl: number; tp: number[]; valid: boolean
+  dibuat: string; terisi: boolean; hasil: string | null; r: number | null
+}
+
+export function useSetupLog(pair: string) {
+  return useRows<LogRow>(
+    `log:${pair}`,
+    sb && (() => q(sb.from('setup_log').select('*').eq('pair', pair).order('dibuat', { ascending: false }).limit(30))),
+    'setup_log',
+    `pair=eq.${pair}`,
   )
 }

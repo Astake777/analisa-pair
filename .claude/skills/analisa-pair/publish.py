@@ -85,6 +85,10 @@ def insert_backtest(rows):
     return _post("backtest_results", rows, "return=minimal")
 
 
+def upsert_setup_log(rows):
+    return _post("setup_log", rows, MERGE)
+
+
 def upsert_macro(rows):
     return _post("macro_series", rows, MERGE, "?on_conflict=series,date")
 

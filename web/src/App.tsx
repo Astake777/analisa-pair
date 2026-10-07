@@ -4,11 +4,11 @@ import type { Band } from './chart/zones'
 import { TFS, useLiveFeed, type TF } from './feed'
 import { useLiveDrivers } from './feed/yahoo'
 import { age, fmt, marketOpen, signed, statusKind, store, wibTime } from './lib/format'
-import { FIXTURE, type Driver, useAnalyses, useBacktest, useMacro, useNewsOutlook, type Mode } from './lib/supabase'
+import { FIXTURE, type Driver, useAnalyses, useSetupLog, useBacktest, useMacro, useNewsOutlook, type Mode } from './lib/supabase'
 import { Amd, Bias, Calendar, Headlines, History, Levels, Notes, PrediksiNews, Strategi } from './panels/Analysis'
 import { Drivers, Makro } from './panels/Drivers'
 import { Outlook } from './panels/Outlook'
-import { Setups } from './panels/Setups'
+import { RekamJejak, Setups } from './panels/Setups'
 
 const PAIR = 'XAUUSD'
 const MODES: Mode[] = ['scalp', 'intraday', 'swing']
@@ -70,6 +70,7 @@ export default function App() {
   const bt = useBacktest(PAIR, mode)
   const news = useNewsOutlook(PAIR)
   const macro = useMacro()
+  const log = useSetupLog(PAIR)
   const drv = useLiveDrivers(an.rows?.[0]?.payload?.drivers ?? NO_DRIVERS)
 
   const [izin, setIzin] = useState(() => (hasNotif ? Notification.permission : 'denied'))
@@ -265,9 +266,10 @@ export default function App() {
                 <p>Jalankan <code>/analisa-pair {PAIR} {mode}</code> di Claude Code. Hasilnya langsung muncul di sini.</p>
               </div>
             ) : (
-              <Setups setups={a.setups ?? []} idx={idx} onPick={(i) => setPick({ key: akey, idx: i })} off={off} price={feed.last} />
+              <Setups setups={a.setups ?? []} idx={idx} onPick={(i) => setPick({ key: akey, idx: i })} off={off} price={feed.last} log={log.rows} />
             )}
           </section>
+          <RekamJejak rows={log.rows} error={log.error} />
           {a?.amd && <Amd amd={a.amd} off={off} />}
         </aside>
       </div>

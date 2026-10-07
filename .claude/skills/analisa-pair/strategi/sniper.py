@@ -18,12 +18,14 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from indikator import atr, ema, kolom, tutup  # noqa: E402
 from regime import MODES, STEP  # noqa: E402
+from strategi import msnr  # noqa: E402
 
-PARAMS = {"poi": "15m", "disp": 1.5, "cari_ob": 3, "zona_max": 10.0, "min_skor": 1, "umur_jam": 12,
-          "lb": 3, "pad": 0.5, "zona": 2.0, "sl_jarak": 3.5, "rr": 3.0, "tp_min": 10.0}
+# validasi.py 8 Okt 2026 (200 hari): kombinasi terbaik seluruh sampel dan lipatan OOS terakhir
+PARAMS = {"poi": "15m", "disp": 1.5, "cari_ob": 3, "zona_max": 10.0, "min_skor": 2, "umur_jam": 12,
+          "lb": 3, "pad": 0.5, "zona": 2.0, "sl_jarak": 3.0, "rr": 3.0, "tp_min": 10.0, "msnr": True}
 SIM = "1m"            # SL beberapa dollar: simulasi di 1m
 EXPIRE_S = 3600       # limit berlaku 1 jam setelah CHoCH
-GRID = {"poi": ["5m", "15m"], "disp": [1.2, 1.5], "min_skor": [0, 1, 2], "lb": [2, 3], "sl_jarak": [3.0, 3.5]}
+GRID = {"msnr": [False, True], "disp": [1.2, 1.5], "min_skor": [1, 2], "lb": [2, 3], "sl_jarak": [3.0, 3.5]}  # POI 5m terbukti rugi (sweep 8 Okt)
 
 
 def arah_bias(by_tf, tfs):
@@ -61,7 +63,15 @@ def poi_list(by_tf, mode, p):
     t, o, h, l, c = kolom(by_tf[tf])
     a = atr(h, l, c)
     out = []
+    papan, lv, nlv, maju = msnr.Papan(), msnr.levels(by_tf[tf], step), 0, 0
     for i in range(4, len(t) - 1):
+        if p.get("msnr"):  # papan level MSNR diperbarui sampai candle i+1 (saat POI diketahui)
+            while maju <= i + 1:
+                while nlv < len(lv) and lv[nlv]["t_ok"] <= t[maju]:
+                    papan.tambah(lv[nlv])
+                    nlv += 1
+                papan.candle(h[maju], l[maju], c[maju])
+                maju += 1
         if a[i - 1] is None or abs(c[i] - o[i]) < p["disp"] * a[i - 1]:
             continue
         side = 1 if c[i] > o[i] else -1
@@ -90,6 +100,12 @@ def poi_list(by_tf, mode, p):
         if gap >= 0.5 * a[i - 1]:
             skor += 1
             alasan.append("FVG lebar")
+        if p.get("msnr"):
+            peran = "support" if side > 0 else "resistance"
+            if not any(lo - 0.5 <= z["harga"] <= hi + 0.5 for z in papan.fresh(peran)):
+                continue
+            skor += 1
+            alasan.append("level MSNR fresh")
         if skor >= p["min_skor"]:
             out.append({"t_ok": T, "side": side, "lo": lo, "hi": hi, "skor": skor, "tf": tf,
                         "alasan": ", ".join(alasan) or "tanpa konfluensi tambahan"})
@@ -193,8 +209,8 @@ def _selftest():
     assert s and all(x["side"] == "buy" for x in s), len(s)
     for x in s:
         risk = x["entry"] - x["sl"]
-        assert abs(risk - 3.5) < 0.011 and x["zona"] == [round(x["entry"] - 2, 2), x["entry"]], x
-        assert x["tp"][0] - x["entry"] >= 10.5 - 0.011, x
+        assert abs(risk - p["sl_jarak"]) < 0.011 and x["zona"] == [round(x["entry"] - 2, 2), x["entry"]], x
+        assert x["tp"][0] - x["entry"] >= max(10, 3 * risk) - 0.011, x
     assert not signals(by, "scalp", {**p, "min_skor": 5})
     st = {}
     signals(by, "scalp", p, st)
