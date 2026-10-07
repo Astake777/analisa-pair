@@ -1,5 +1,6 @@
 import { FIXTURE, type NewsRow } from '../lib/supabase'
 import { dirClass, fmt, wibTime } from '../lib/format'
+import { Impact } from './Analysis'
 
 const num = (v: number | null) => (v == null ? '–' : fmt(Number(v), 2).replace(/\.?0+$/, ''))
 
@@ -18,12 +19,13 @@ export function Outlook({ rows, error }: { rows: NewsRow[] | null; error: string
       <div className="tbl-wrap tall">
         <table>
           <thead><tr>
-            <th>Waktu</th><th>Event</th><th className="r">F</th><th className="r">P</th><th className="r">A</th><th>Dampak</th><th>Lean / hasil</th>
+            <th>Waktu</th><th>Impact</th><th>Event</th><th className="r">F</th><th className="r">P</th><th className="r">A</th><th>Dampak</th><th>Lean / hasil</th>
           </tr></thead>
           <tbody>
             {rows.map((r) => (
               <tr key={r.id}>
                 <td className="num nw">{wibTime(r.event_time)}</td>
+                <td><Impact v={r.importance === 1 ? 'High' : r.importance === 0 ? 'Medium' : null} /></td>
                 <td>{r.title}</td>
                 <td className="r num">{num(r.forecast)}</td>
                 <td className="r num">{num(r.previous)}</td>

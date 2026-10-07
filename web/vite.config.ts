@@ -10,8 +10,16 @@ export default defineConfig(({ mode }) => {
   const host = env.OANDA_ENV === 'live' ? 'fxtrade' : 'fxpractice'
   const headers = { Authorization: `Bearer ${token}` }
 
+  // Yahoo tidak mengirim header CORS; indeks pendukung (US10Y, DXY, dst.) diambil lewat proxy ini.
+  const yahoo: ProxyOptions = {
+    target: 'https://query1.finance.yahoo.com',
+    changeOrigin: true,
+    headers: { 'User-Agent': 'Mozilla/5.0' },
+    rewrite: (p) => p.replace(/^\/yahoo/, ''),
+  }
   const proxy: Record<string, ProxyOptions> = enabled
     ? {
+        '/yahoo': yahoo,
         '/oanda/api': {
           target: `https://api-${host}.oanda.com`,
           changeOrigin: true,
@@ -25,7 +33,7 @@ export default defineConfig(({ mode }) => {
           rewrite: () => `/v3/accounts/${encodeURIComponent(account)}/pricing/stream?instruments=XAU_USD`,
         },
       }
-    : {}
+    : { '/yahoo': yahoo }
 
   return {
     plugins: [react()],

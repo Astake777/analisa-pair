@@ -17,7 +17,7 @@ export type Driver = {
 }
 export type CalEvent = {
   waktuUTC?: string; waktuWIB: string; jenis?: string | null; arah?: string | null; kekuatan?: string | null
-  items: { title: string; actual?: number | null; forecast?: number | null; previous?: number | null }[]
+  items: { title: string; impact?: 'High' | 'Medium' | null; actual?: number | null; forecast?: number | null; previous?: number | null }[]
 }
 export type Payload = {
   updatedAt: string; pair: string; mode?: string; gaya?: string; status: string; keyakinan?: string; price?: number

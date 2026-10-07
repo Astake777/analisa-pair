@@ -139,7 +139,7 @@ def build(pair="XAUUSD", days=45, raw=None, now=None, en=None):
     raw = cal.fetch(LOOKBACK_H, days) if raw is None else raw
     lo, hi = now - dt.timedelta(hours=WINDOW_BACK_H), now + dt.timedelta(days=days)
     sel = [(e, cal.component(e["title"])) for e in raw if lo <= _t(e) <= hi]
-    sel = [(e, c) for e, c in sel if c or e.get("importance") == 1]
+    sel = [(e, c) for e, c in sel if cal.impact(e)]
     if en is None:
         en = {}
         if any(c in HEADLINE and e["actual"] is None for e, c in sel):
@@ -156,7 +156,7 @@ def build(pair="XAUUSD", days=45, raw=None, now=None, en=None):
     for e, c in sorted(sel, key=lambda x: _t(x[0])):
         rows.append({
             "id": str(e["id"]), "pair": pair, "event_time": e["date"], "title": e["title"], "komponen": c,
-            "importance": e.get("importance"), "forecast": e["forecast"], "previous": e["previous"],
+            "importance": 1 if cal.impact(e) == "High" else 0, "forecast": e["forecast"], "previous": e["previous"],
             "actual": e["actual"],
             "dampak": dampak(pair, c, any(e[k] is not None for k in ("actual", "forecast", "previous"))),
             "lean": lean(pair, e, c, raw, en) if c and e["actual"] is None else None,
@@ -201,12 +201,15 @@ def _selftest():
         ev("ccpi", "2026-11-12T13:30", "Core Inflation Rate MoM", 1, None, 0.3, 0.3, "2026-10-31"),
         ev("fomc", "2026-11-18T19:00", "FOMC Minutes", 1),
         ev("dur", "2026-11-19T13:30", "Durable Goods Orders MoM", 0, None, 0.1, 0),
+        ev("eia", "2026-11-19T15:30", "EIA Crude Oil Stocks Change", 0, None, 1.7, 0.9),
+        ev("whl", "2026-11-19T15:00", "Wholesale Inventories MoM", -1, None, 0.1, 0.2),
     ]
     en = {s: [("2026-09", 60.0)] * 5 + [("2026-10", 63.0)] * 5 for s in ("CL=F", "RB=F")}  # +5%
     now = dt.datetime(2026, 11, 5, 12, 0, tzinfo=dt.timezone.utc)
     r = {x["id"]: x for x in build("XAUUSD", 45, raw, now, en)}
-    # jendela & pemetaan: klaim/ADP lama di luar jendela, impor rendah tak terpetakan dibuang
-    assert set(r) == {"ppi", "cppi", "nfp", "ur", "ahe", "cpi", "ccpi", "fomc"}, sorted(r)
+    # jendela & dampak: klaim/ADP lama di luar jendela, hanya High/Medium ala ForexFactory
+    assert set(r) == {"ppi", "cppi", "nfp", "ur", "ahe", "cpi", "ccpi", "fomc", "dur"}, sorted(r)
+    assert r["dur"]["importance"] == 0 and r["ahe"]["importance"] == 1, (r["dur"], r["ahe"])
     assert r["nfp"]["komponen"] == "nfp" and r["fomc"]["komponen"] is None
     # dampak: NFP panas -> emas SELL; pengangguran panas (naik) -> emas BUY
     assert r["nfp"]["dampak"] == {"panas": "SELL", "dingin": "BUY"}, r["nfp"]["dampak"]

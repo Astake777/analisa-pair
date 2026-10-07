@@ -7,6 +7,7 @@ Self-check: python kalender.py --selftest
 import datetime as dt
 import json
 import os
+import re
 import sys
 import urllib.request
 from collections import defaultdict
@@ -29,6 +30,22 @@ TITLE = {
 }
 
 
+# Medium di TradingView yang di ForexFactory dianggap low: stok minyak, GDPNow, lelang, indeks CPI mentah, dst.
+LOW = re.compile(r"EIA |API |GDPNow|MBA |CPI s\.a|^CPI$|Budget|Inventories|Weekly|Home Sales MoM|Auction|Baker Hughes|Money Supply")
+HIGH_COMP = {"nfp", "unemployment", "ahe_mm", "adp", "jolts", "cpi_mm", "cpi_yy", "core_cpi_mm", "core_cpi_yy",
+             "ppi_mm", "core_ppi_mm", "core_pce_mm", "retail_sales_mm", "gdp_qq", "ism_mfg", "ism_services"}
+
+
+def impact(e):
+    """Dampak ala ForexFactory: 'High', 'Medium', atau None (low, tidak ditampilkan)."""
+    comp = component(e["title"])
+    if comp in HIGH_COMP or e.get("importance") == 1:
+        return "High"
+    if comp or (e.get("importance") == 0 and not LOW.search(e["title"])):
+        return "Medium"
+    return None
+
+
 def component(title):
     if title.startswith("GDP Growth Rate QoQ"):
         return "gdp_qq"
@@ -48,9 +65,8 @@ def events(raw, pair):
     """Kelompokkan event per jam rilis -> list dict, plus skor kalau actual sudah ada."""
     groups = defaultdict(list)
     for e in raw:
-        comp = component(e["title"])
-        if comp or e.get("importance") == 1:
-            groups[e["date"][:16]].append((e, comp))
+        if impact(e):
+            groups[e["date"][:16]].append((e, component(e["title"])))
     out = []
     for t in sorted(groups):
         when = dt.datetime.fromisoformat(t + ":00+00:00").astimezone(WIB)
@@ -58,7 +74,7 @@ def events(raw, pair):
              "jenis": None, "usd": None, "arah": None, "kekuatan": None, "skor": None}
         data = {}
         for e, comp in groups[t]:
-            g["items"].append({k: e[k] for k in ("title", "actual", "forecast", "previous")})
+            g["items"].append({**{k: e[k] for k in ("title", "actual", "forecast", "previous")}, "impact": impact(e)})
             if comp and e["forecast"] is not None and e["actual"] is not None:
                 data[comp] = {"actual": e["actual"], "forecast": e["forecast"]}
         if data:
@@ -95,14 +111,19 @@ def _selftest():
          "actual": None, "forecast": 47.6, "previous": 48.1},
         {"date": "2026-10-09T12:30:00.000Z", "title": "Durable Goods Orders MoM", "importance": 0,
          "actual": None, "forecast": 0.1, "previous": 0},
+        {"date": "2026-10-09T14:30:00.000Z", "title": "EIA Crude Oil Stocks Change", "importance": 0,
+         "actual": None, "forecast": 1.7, "previous": 0.9},
+        {"date": "2026-10-09T15:00:00.000Z", "title": "Wholesale Inventories MoM", "importance": -1,
+         "actual": None, "forecast": 0.1, "previous": 0.2},
     ]
     r = report(ev, "XAUUSD")
     assert "Fri 02 Oct 19:30 WIB" in r, r                  # 12:30 UTC -> 19:30 WIB
     assert "USD DOVISH | XAUUSD BUY (kuat" in r, r          # NFP -61K & upah -0.2 -> dovish kuat
-    assert "Fri 09 Oct 21:00 WIB" in r and "Durable" not in r, r  # impor tinggi masuk, impor rendah tak terpetakan dibuang
+    assert "Fri 09 Oct 21:00 WIB" in r and "Durable" in r and "EIA" not in r and "Wholesale" not in r, r  # high+medium saja
     assert component("GDP Growth Rate QoQ Adv") == "gdp_qq"
     g = events(ev, "XAUUSD")
     assert g[0]["jenis"] == "HASIL" and g[0]["arah"] == "BUY" and len(g[0]["items"]) == 3, g[0]
+    assert [i["impact"] for i in g[0]["items"]] == ["High", "High", "High"], g[0]  # upah = komponen inti -> High
     assert g[-1]["waktuWIB"] == "Fri 09 Oct 21:00 WIB" and g[-1]["jenis"] is None, g[-1]
     print("selftest OK")
 

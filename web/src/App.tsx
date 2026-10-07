@@ -2,8 +2,9 @@ import { useEffect, useMemo, useState } from 'react'
 import Chart from './chart/Chart'
 import type { Band } from './chart/zones'
 import { TFS, useLiveFeed, type TF } from './feed'
+import { useLiveDrivers } from './feed/yahoo'
 import { age, fmt, marketOpen, signed, statusKind, store, wibTime } from './lib/format'
-import { FIXTURE, useAnalyses, useBacktest, useMacro, useNewsOutlook, type Mode } from './lib/supabase'
+import { FIXTURE, type Driver, useAnalyses, useBacktest, useMacro, useNewsOutlook, type Mode } from './lib/supabase'
 import { Amd, Bias, Calendar, Headlines, History, Levels, Notes, PrediksiNews, Strategi } from './panels/Analysis'
 import { Drivers, Makro } from './panels/Drivers'
 import { Outlook } from './panels/Outlook'
@@ -12,6 +13,7 @@ import { Setups } from './panels/Setups'
 const PAIR = 'XAUUSD'
 const MODES: Mode[] = ['scalp', 'intraday', 'swing']
 const NO_LEVELS: { price: number; label: string; kind: string }[] = []
+const NO_DRIVERS: Driver[] = []
 
 const ICON = {
   wait: <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" strokeWidth="1.5" /><path d="M8 4.5V8l2.5 1.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>,
@@ -40,6 +42,7 @@ export default function App() {
   const bt = useBacktest(PAIR, mode)
   const news = useNewsOutlook(PAIR)
   const macro = useMacro()
+  const drv = useLiveDrivers(an.rows?.[0]?.payload?.drivers ?? NO_DRIVERS)
 
   const latest = an.rows?.[0] ?? null
   const a = latest?.payload ?? null
@@ -197,8 +200,8 @@ export default function App() {
 
       {a && (
         <section className="card" aria-labelledby="drvTitle">
-          <div className="card-head"><h2 id="drvTitle">Indeks pendukung</h2><span className="sub">Perubahan 24 jam, terhadap setup yang tampil di chart</span></div>
-          <Drivers drivers={a.drivers ?? []} side={setup?.side} />
+          <div className="card-head"><h2 id="drvTitle">Indeks pendukung</h2><span className="sub">{drv.live ? 'Live, diperbarui tiap 20 detik (Yahoo, bisa tertunda beberapa menit)' : 'Dari analisis terakhir'} · perubahan 24 jam</span></div>
+          <Drivers drivers={drv.drivers} side={setup?.side} />
         </section>
       )}
 

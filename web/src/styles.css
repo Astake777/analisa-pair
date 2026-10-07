@@ -185,6 +185,9 @@ button, input { font: inherit; color: inherit; }
 .drv-val { font-size: 18px; font-weight: 600; color: var(--ink-strong); }
 .drv svg { width: 100%; height: 44px; display: block; }
 .tag { font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: var(--r-sm); background: var(--raised); justify-self: start; }
+.imp { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.imp::before { content: ''; width: 10px; height: 10px; border-radius: 2px; background: var(--imp, var(--muted)); }
+.imp.high { --imp: var(--down); } .imp.med { --imp: #f0883e; }
 .tag.pro { color: var(--up); } .tag.con { color: var(--down); } .tag.ctx { color: var(--muted); }
 
 /* lower grid */

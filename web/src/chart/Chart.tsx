@@ -31,6 +31,20 @@ const theme = () => ({
   crosshair: { mode: CrosshairMode.Normal },
 })
 
+type Level = Props['levels'][number]
+
+// Chart hanya memuat pemicu news dan 2 support/resistance terdekat di tiap sisi; daftar lengkap ada di panel Level.
+// EMA sudah tampil sebagai garis, jadi level EMA dilewati.
+export function keyLevels(levels: Level[], ref: number | undefined, setup: Setup | null): Level[] {
+  const pemicu = levels.filter((l) => l.kind.startsWith('pemicu'))
+  const taken = [...pemicu.map((l) => l.price), ...(setup ? [setup.entry, setup.sl, ...(setup.tp ?? [])] : [])]
+  const sr = levels.filter((l) => (l.kind === 'support' || l.kind === 'resistance') && !/^EMA/i.test(l.label)
+    && !taken.some((t) => Math.abs(t - l.price) < 1.5))
+  if (ref == null) return pemicu
+  const near = (xs: Level[]) => xs.sort((x, y) => Math.abs(x.price - ref) - Math.abs(y.price - ref)).slice(0, 2)
+  return [...pemicu, ...near(sr.filter((l) => l.price > ref)), ...near(sr.filter((l) => l.price <= ref))]
+}
+
 export default function Chart({ bars, shift, setup, zones, levels, emptyText }: Props) {
   const box = useRef<HTMLDivElement>(null)
   const api = useRef<Api | null>(null)
@@ -57,7 +71,7 @@ export default function Chart({ bars, shift, setup, zones, levels, emptyText }: 
       },
     })
     const line = (style: LineStyle) =>
-      chart.addLineSeries({ lineWidth: 2, lineStyle: style, priceLineVisible: false, lastValueVisible: true, crosshairMarkerVisible: false })
+      chart.addLineSeries({ lineWidth: 1, lineStyle: style, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
     const a: Api = { chart, candles, e20: line(LineStyle.Solid), e50: line(LineStyle.Solid), e200: line(LineStyle.Dashed), prim: new ZoneBands() }
     candles.attachPrimitive(a.prim)
     chart.subscribeCrosshairMove((p) => {
@@ -130,9 +144,10 @@ export default function Chart({ bars, shift, setup, zones, levels, emptyText }: 
       if (price == null) return
       lines.current.push(a.candles.createPriceLine({ price: price + shift, color, lineWidth: 1, lineStyle: style, axisLabelVisible: true, title }))
     }
-    for (const lv of levels) {
-      if (lv.kind === 'sekarang' || lv.kind.startsWith('zona')) continue
-      add(lv.price, css('--muted'), lv.label, LineStyle.LargeDashed)
+    for (const lv of keyLevels(levels, live.current.bars.at(-1)?.close, setup)) {
+      if (lv.kind === 'pemicu-buy') add(lv.price, css('--up'), 'BUY jika tembus', LineStyle.Dashed)
+      else if (lv.kind === 'pemicu-sell') add(lv.price, css('--down'), 'SELL jika tembus', LineStyle.Dashed)
+      else add(lv.price, css('--muted'), lv.label.split(' (')[0], LineStyle.Dotted)
     }
     if (setup) {
       add(setup.entry, css('--accent'), 'Entry', LineStyle.Solid)
@@ -141,7 +156,7 @@ export default function Chart({ bars, shift, setup, zones, levels, emptyText }: 
     }
     extras.current = setup ? [setup.entry, setup.sl, ...(setup.tp ?? [])].filter((v) => v != null).map((v) => v + shift) : []
     a.chart.priceScale('right').applyOptions({ autoScale: true })
-  }, [setup, levels, shift, themeRev])
+  }, [setup, levels, shift, themeRev, bars.length > 0])
 
   // Hitung mundur penutupan candle, diletakkan di bawah label harga terakhir pada sumbu kanan.
   useEffect(() => {

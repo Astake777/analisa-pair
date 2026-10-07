@@ -53,7 +53,7 @@ export function Levels({ a, off, price }: { a: Payload; off: number; price: numb
     ...(a.levels ?? []).filter((l) => l.kind !== 'sekarang'),
     ...(price != null ? [{ price, label: 'Harga sekarang', kind: 'sekarang' }] : []),
   ].sort((x, y) => y.price - x.price)
-  const cls = (k: string) => (k === 'sekarang' ? 'now' : k === 'zona-sell' ? 'zone-sell' : k === 'zona-buy' ? 'zone-buy' : '')
+  const cls = (k: string) => (k === 'sekarang' ? 'now' : k === 'zona-sell' || k === 'pemicu-sell' ? 'zone-sell' : k === 'zona-buy' || k === 'pemicu-buy' ? 'zone-buy' : '')
   return (
     <section className="card" aria-labelledby="lvlTitle">
       <div className="card-head"><h2 id="lvlTitle">Level kunci</h2></div>
@@ -78,17 +78,23 @@ export function Notes({ notes }: { notes: string[] }) {
   )
 }
 
+export function Impact({ v }: { v?: string | null }) {
+  if (!v) return null
+  return <span className={`imp ${v === 'High' ? 'high' : 'med'}`}>{v === 'High' ? 'High' : 'Medium'}</span>
+}
+
 export function Calendar({ events }: { events: NonNullable<Payload['events']> }) {
   return (
     <section className="card span2" aria-labelledby="calTitle">
-      <div className="card-head"><h2 id="calTitle">Kalender USD</h2><span className="sub">Waktu WIB. A = actual, F = forecast, P = previous</span></div>
+      <div className="card-head"><h2 id="calTitle">Kalender USD</h2><span className="sub">High dan medium impact saja. Waktu WIB, A = actual, F = forecast, P = previous</span></div>
       <div className="tbl-wrap">
         <table>
-          <thead><tr><th>Waktu</th><th>Event</th><th className="r">A</th><th className="r">F</th><th className="r">P</th><th>Arah</th></tr></thead>
+          <thead><tr><th>Waktu</th><th>Impact</th><th>Event</th><th className="r">A</th><th className="r">F</th><th className="r">P</th><th>Arah</th></tr></thead>
           <tbody>
             {events.flatMap((g, gi) => g.items.map((it, i) => (
               <tr key={`${gi}-${i}`}>
                 <td className="num nw">{i === 0 ? g.waktuWIB : ''}</td>
+                <td><Impact v={it.impact} /></td>
                 <td>{it.title}</td>
                 <td className="r num">{it.actual ?? '–'}</td>
                 <td className="r num">{it.forecast ?? '–'}</td>
@@ -100,7 +106,7 @@ export function Calendar({ events }: { events: NonNullable<Payload['events']> })
                 </td>
               </tr>
             )))}
-            {!events.length && <tr><td colSpan={6} className="sub">Tidak ada event USD penting dalam 7 hari.</td></tr>}
+            {!events.length && <tr><td colSpan={7} className="sub">Tidak ada event USD high/medium dalam 7 hari.</td></tr>}
           </tbody>
         </table>
       </div>
