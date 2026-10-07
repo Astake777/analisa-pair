@@ -13,7 +13,6 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from backtest import OUT  # noqa: E402
-from strategi import HANYA_INDIKATOR  # noqa: E402
 
 MIN_TRADES = 15
 
@@ -25,7 +24,7 @@ def terbaru(pair, mode):
 
 
 def pilih(regime, rows, min_trades=MIN_TRADES):
-    oos = [r for r in rows if r["sample"] == "oos" and r["strategy"] not in HANYA_INDIKATOR]
+    oos = [r for r in rows if r["sample"] == "oos"]
     kandidat = [{"strategy": r["strategy"], "regime": r["regime"], "trades": r["trades"], "winrate": r["winrate"],
                  "expectancy": r["expectancy"], "sample": "oos"}
                 for r in oos if r["regime"] in (regime["tren"], "semua")]
@@ -58,7 +57,6 @@ def _selftest():
     assert p["terpilih"] == "c" and p["izinKontra"], p
     assert pilih(reg, [row("a", "semua", 40, -0.1)])["terpilih"] == "NO TRADE"
     assert pilih(reg, [])["alasan"] == "belum ada hasil backtest"
-    assert pilih(reg, [row("amd", "semua", 40, 0.9)])["terpilih"] == "NO TRADE"   # AMD hanya indikator fase
     print("selftest OK")
 
 
