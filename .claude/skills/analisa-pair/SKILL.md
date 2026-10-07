@@ -86,6 +86,12 @@ Website lokal: `cd web && npm run dev` lalu buka http://localhost:5180 (harga li
 
 Untuk analisis berkala: `/loop 30m /analisa-pair XAUUSD intraday`. Harga di website sudah live sendiri, jadi `/loop` hanya untuk memperbarui analisis.
 
+### Sniper (scalp, uji coba) dan kabar otomatis
+- Aturan (`strategi/sniper.py`): zona supply/demand 15m (OB + displacement 1.5x ATR + FVG, skor konfluensi ≥1) searah bias 1H+30m. Saat harga masuk zona, tunggu sweep lalu CHoCH 1m. SL = ujung sweep ± 0.5; zona entry 20 pips; SL 35 pips dari tepi pertama; TP1 ≥ 100 pips dan ≥ 3R. 1 pip = $0.10.
+- Backtest: `python strategi/sniper.py --sweep scalp` (corong sinyal + IS/OOS). Hasil 8 Okt 2026: 12 trade/60 hari, 7 menang. Selalu tandai **uji coba** sampai OOS ≥ 15 trade dan expectancy > 0.
+- Watcher: Claude menjalankan `python .claude/skills/analisa-pair/pantau.py XAUUSD` lewat `Monitor` (timeout maks, arm ulang setiap habis). Setiap baris `SETUP ...` atau `SELESAI ...` diteruskan ke HP dengan `PushNotification`; baris `ERROR ...` dicek. Website menampilkan banner, bunyi, dan notifikasi browser sendiri.
+- Kartu setup di payload: `zone`, `entry`, `sl`, `tp`, `rr`, `alasan: {entry, sl, tp}` (masing-masing satu kalimat pendek), `langkah` (≤ 2 baris), `batal`, `eksperimen`.
+
 ## 8. Format output di chat
 
 ```

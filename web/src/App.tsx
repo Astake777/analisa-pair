@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Chart from './chart/Chart'
 import type { Band } from './chart/zones'
 import { TFS, useLiveFeed, type TF } from './feed'
@@ -14,6 +14,23 @@ const PAIR = 'XAUUSD'
 const MODES: Mode[] = ['scalp', 'intraday', 'swing']
 const NO_LEVELS: { price: number; label: string; kind: string }[] = []
 const NO_DRIVERS: Driver[] = []
+const hasNotif = typeof Notification !== 'undefined'
+
+// Dua bunyi pendek; tanpa file audio.
+function bunyi() {
+  try {
+    const ctx = new AudioContext()
+    ;[0, 0.25].forEach((t) => {
+      const o = ctx.createOscillator(), g = ctx.createGain()
+      o.frequency.value = 880
+      g.gain.setValueAtTime(0.15, ctx.currentTime + t)
+      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + t + 0.2)
+      o.connect(g).connect(ctx.destination)
+      o.start(ctx.currentTime + t)
+      o.stop(ctx.currentTime + t + 0.2)
+    })
+  } catch { /* browser memblokir audio sebelum ada interaksi */ }
+}
 
 const ICON = {
   sun: <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3" fill="none" stroke="currentColor" strokeWidth="1.5" /><path d="M8 1.5v1.8M8 12.7v1.8M1.5 8h1.8M12.7 8h1.8M3.4 3.4l1.3 1.3M11.3 11.3l1.3 1.3M3.4 12.6l1.3-1.3M11.3 4.7l1.3-1.3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>,
@@ -54,6 +71,29 @@ export default function App() {
   const news = useNewsOutlook(PAIR)
   const macro = useMacro()
   const drv = useLiveDrivers(an.rows?.[0]?.payload?.drivers ?? NO_DRIVERS)
+
+  const [izin, setIzin] = useState(() => (hasNotif ? Notification.permission : 'denied'))
+  const [kabar, setKabar] = useState<string | null>(null)
+  const dilihat = useRef<Partial<Record<Mode, Set<string>>>>({})
+
+  // Setup sniper baru di baris analisis terbaru -> banner, bunyi, notifikasi browser. Muatan pertama tiap mode hanya dicatat.
+  useEffect(() => {
+    const sn = (an.rows?.[0]?.payload.setups ?? []).filter((x) => x.label === 'sniper')
+    if (!an.rows) return
+    const kunci = (x: (typeof sn)[number]) => `${x.side}-${x.entry}`
+    const seen = dilihat.current[mode]
+    if (!seen) {
+      dilihat.current[mode] = new Set(sn.map(kunci))
+      return
+    }
+    const baru = sn.find((x) => !seen.has(kunci(x)))
+    sn.forEach((x) => seen.add(kunci(x)))
+    if (!baru) return
+    const text = `${baru.side.toUpperCase()} limit ${fmt(baru.entry, 2)}, SL ${fmt(baru.sl, 2)}, TP ${fmt(baru.tp?.[0], 2)}`
+    setKabar(text)
+    bunyi()
+    if (hasNotif && Notification.permission === 'granted') new Notification('Setup sniper XAUUSD', { body: text })
+  }, [an.rows, mode])
 
   const latest = an.rows?.[0] ?? null
   const a = latest?.payload ?? null
@@ -107,6 +147,11 @@ export default function App() {
             onChange={(e) => { setOffText(e.target.value); store.set(`offset:${PAIR}`, e.target.value) }}
           />
         </label>
+        {izin === 'default' && (
+          <button type="button" className="theme-btn" onClick={() => Notification.requestPermission().then(setIzin)}>
+            Aktifkan notifikasi setup
+          </button>
+        )}
         <button
           type="button" className="theme-btn" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
           aria-label={theme === 'dark' ? 'Ganti ke tema terang' : 'Ganti ke tema gelap'}
@@ -126,6 +171,13 @@ export default function App() {
           <span className="sub">
             Analisis di bawah adalah contoh bentuk, bukan analisis nyata. Isi <code>VITE_SUPABASE_URL</code> dan <code>VITE_SUPABASE_ANON_KEY</code> di <code>.env</code> lalu jalankan ulang <code>npm run dev</code>. Harga live tetap asli.
           </span>
+        </div>
+      )}
+
+      {kabar && (
+        <div className="kabar" role="alert">
+          <span><b>Setup sniper baru:</b> {kabar}</span>
+          <button type="button" className="theme-btn" onClick={() => setKabar(null)}>Tutup</button>
         </div>
       )}
 
