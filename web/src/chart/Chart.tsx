@@ -39,11 +39,16 @@ export default function Chart({ bars, shift, setup, zones, levels, emptyText }: 
   const prev = useRef<{ first?: Bar; len: number; shift: number }>({ len: 0, shift: 0 })
   const [hover, setHover] = useState<Pt | null>(null)
   const [themeRev, setThemeRev] = useState(0)
+  const [cd, setCd] = useState<{ top: number; width: number; text: string; up: boolean } | null>(null)
+  const live = useRef({ bars, shift })
+  live.current = { bars, shift }
 
   useEffect(() => {
     const chart = createChart(box.current!, { autoSize: true, ...theme() })
     const candles = chart.addCandlestickSeries({
-      priceLineVisible: false,
+      priceLineVisible: true,
+      priceLineStyle: LineStyle.Dotted,
+      priceLineWidth: 1,
       autoscaleInfoProvider: (orig: () => AutoscaleInfo | null) => {
         const r = orig()
         const ex = extras.current
@@ -138,6 +143,27 @@ export default function Chart({ bars, shift, setup, zones, levels, emptyText }: 
     a.chart.priceScale('right').applyOptions({ autoScale: true })
   }, [setup, levels, shift, themeRev])
 
+  // Hitung mundur penutupan candle, diletakkan di bawah label harga terakhir pada sumbu kanan.
+  useEffect(() => {
+    const tick = () => {
+      const a = api.current
+      const { bars: bs, shift: sh } = live.current
+      const last = bs.at(-1)
+      if (!a || !last || bs.length < 2) return setCd(null)
+      const tail = bs.slice(-6)
+      const step = Math.min(...tail.slice(1).map((x, i) => x.time - tail[i].time))
+      const left = last.time + step - Math.floor(Date.now() / 1000)
+      const y = a.candles.priceToCoordinate(last.close + sh)
+      if (left <= 0 || left > step || y == null) return setCd(null)
+      const h = Math.floor(left / 3600), m = Math.floor((left % 3600) / 60), sec = left % 60
+      const text = (h ? `${h}:${String(m).padStart(2, '0')}` : String(m).padStart(2, '0')) + ':' + String(sec).padStart(2, '0')
+      setCd({ top: y + 9, width: a.chart.priceScale('right').width(), text, up: last.close >= last.open })
+    }
+    tick()
+    const id = setInterval(tick, 1000)
+    return () => clearInterval(id)
+  }, [])
+
   const lastBar = bars.at(-1)
   const b = hover ?? (lastBar && {
     time: (lastBar.time + WIB) as UTCTimestamp, open: lastBar.open + shift, high: lastBar.high + shift, low: lastBar.low + shift, close: lastBar.close + shift,
@@ -157,6 +183,11 @@ export default function Chart({ bars, shift, setup, zones, levels, emptyText }: 
         )}
       </div>
       <div className="chart" ref={box} role="img" aria-label="Chart candlestick dengan EMA, zona entry, range Asia, entry, stop loss dan target">
+        {cd && (
+          <div className={`countdown num ${cd.up ? 'up-bg' : 'down-bg'}`} style={{ top: cd.top, width: cd.width }} aria-label={`Candle tutup dalam ${cd.text}`}>
+            {cd.text}
+          </div>
+        )}
         {!bars.length && (
           <div className="chart-empty" aria-live="polite">
             <div className="spin" aria-hidden="true" />

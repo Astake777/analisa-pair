@@ -11,7 +11,7 @@
   --accent: #fcd535;
   --accent-text: #fcd535;
   --on-accent: #181a20;
-  --up: #0ecb81;
+  --on-trade: #0b0e11; --up: #0ecb81;
   --down: #ff5c6f;
   --info: #3b82f6;
   --ema20: #3987e5;
@@ -30,7 +30,7 @@
     color-scheme: light;
     --bg: #f5f5f5; --card: #ffffff; --raised: #f5f5f5; --line: #eaecef;
     --ink: #181a20; --ink-strong: #000000; --muted: #5e6673;
-    --accent-text: #866500; --up: #05875a; --down: #cf304a;
+    --accent-text: #866500; --on-trade: #ffffff; --up: #05875a; --down: #cf304a;
     --ema20: #2a78d6; --ema50: #e87ba4; --ema200: #5e6673;
     --zone-sell: rgba(207, 48, 74, 0.10); --zone-buy: rgba(5, 135, 90, 0.10); --zone-range: rgba(94, 102, 115, 0.09);
   }
@@ -39,7 +39,7 @@
   color-scheme: light;
   --bg: #f5f5f5; --card: #ffffff; --raised: #f5f5f5; --line: #eaecef;
   --ink: #181a20; --ink-strong: #000000; --muted: #5e6673;
-  --accent-text: #866500; --up: #05875a; --down: #cf304a;
+  --accent-text: #866500; --on-trade: #ffffff; --up: #05875a; --down: #cf304a;
   --ema20: #2a78d6; --ema50: #e87ba4; --ema200: #5e6673;
   --zone-sell: rgba(207, 48, 74, 0.10); --zone-buy: rgba(5, 135, 90, 0.10); --zone-range: rgba(94, 102, 115, 0.09);
 }
@@ -127,6 +127,9 @@ button, input { font: inherit; color: inherit; }
 .readout { font-size: 12px; color: var(--muted); display: flex; gap: 12px; flex-wrap: wrap; min-height: 18px; }
 .readout b { color: var(--ink); font-weight: 500; }
 .chart { height: clamp(320px, 52vh, 520px); width: 100%; position: relative; }
+.countdown { position: absolute; right: 0; z-index: 3; pointer-events: none; text-align: center; font-size: 11px; line-height: 16px; color: var(--on-trade); }
+.countdown.up-bg { background: var(--up); }
+.countdown.down-bg { background: var(--down); }
 .chart-empty { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 8px; color: var(--muted); font-size: 13px; z-index: 2; pointer-events: none; }
 .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--muted); margin-top: 10px; }
 .legend span { display: inline-flex; align-items: center; gap: 6px; }
