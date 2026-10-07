@@ -220,7 +220,8 @@ def _sintetis():
         else:
             step = 0.05
         o, px = px, px + step
-        rows.append([t0 + i * 60, o, max(o, px) + 0.05, min(o, px) - 0.05, px, 1])
+        # taker buy: candle naik didominasi pembeli, candle turun oleh penjual
+        rows.append([t0 + i * 60, o, max(o, px) + 0.05, min(o, px) - 0.05, px, 1, 0.8 if px >= o else 0.2])
     by = {"1m": rows}
     for tf in ("5m", "15m", "30m", "1h", "4h", "1d"):
         by[tf] = aggregate([list(r) for r in rows], STEP[tf])
@@ -232,6 +233,11 @@ def _selftest():
     p = {**PARAMS, "min_skor": 0}
     s = signals(by, "scalp", p)
     assert s and all(x["side"] == "buy" for x in s), len(s)
+    # delta: tanpa kolom taker buy tidak ada sinyal; taker dibalik (penjual dominan di kaki naik) -> ditolak
+    tanpa = {tf: [r[:6] for r in rows] for tf, rows in by.items()}
+    assert not signals(tanpa, "scalp", p)
+    balik = {**by, "1m": [r[:6] + [r[5] - r[6]] for r in by["1m"]]}
+    assert not signals(balik, "scalp", p) and signals(balik, "scalp", {**p, "delta": False})
     for x in s:
         risk = x["entry"] - x["sl"]
         assert abs(risk - p["sl_jarak"]) < 0.011 and x["zona"] == [round(x["entry"] - 2, 2), x["entry"]], x
