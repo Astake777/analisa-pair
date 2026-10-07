@@ -14,10 +14,12 @@ Ini **analisis saja**. Jangan pernah memanggil tool eksekusi order (mis. connect
 
 | Pair | Harga (`yahoo_price`) | TA (`coin_analysis` / `multi_timeframe_analysis`) | Berita (`financial_news`, `market_sentiment`) | Driver makro |
 |---|---|---|---|---|
-| XAUUSD | `GC=F` | proxy `GLD` @ `AMEX` | `GLD` | `^TNX` (terbalik), `DX-Y.NYB` (terbalik), `CL=F` |
+| XAUUSD | `GC=F` | coba `XAUUSD` @ `OANDA` dulu (spot, tanpa konversi), fallback `GLD` @ `AMEX` | `GLD` | `^TNX` (terbalik), `DX-Y.NYB` (terbalik), `CL=F` |
 | XAGUSD | `SI=F` | proxy `SLV` @ `AMEX` | `SLV` | `^TNX`, `DX-Y.NYB` |
 | BTCUSD | `BTC-USD` | `BTCUSDT` @ `BINANCE` (langsung) | `BTC` (category crypto) | `^TNX`, `NQ=F` |
 | US100 | `NQ=F` | proxy `QQQ` @ `NASDAQ` | `QQQ` | `^TNX` (terbalik) |
+
+`OANDA`/`FX_IDC`/`TVC` diterima server untuk XAUUSD, XAGUSD, EURUSD, GBPUSD, USDJPY, tapi baru terverifikasi di level parameter (scanner sedang down saat dites 7 Okt). Jangan pakai `FOREXCOM` atau futures `GC1!` @ `COMEX`/`CME` di `coin_analysis`: exchange-nya diam-diam diganti `KUCOIN`. Cek kolom `exchange` di hasil; kalau berbunyi `KUCOIN` padahal kamu minta yang lain, hasilnya tidak valid.
 
 Pair lain: cari padanan di tabel ini; kalau tidak ada, pakai `yahoo_price` saja dan bilang TA tidak tersedia.
 
