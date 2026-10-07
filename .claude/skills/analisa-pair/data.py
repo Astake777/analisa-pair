@@ -150,9 +150,12 @@ def _cached(path, tf, refresh):
 
 
 def _save(path, rows):
+    # tulis ke file sementara lalu ganti: proses yang dihentikan di tengah tulisan tidak merusak cache
     os.makedirs(CACHE, exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
+    tmp = f"{path}.{os.getpid()}.tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
         json.dump(rows, f)
+    os.replace(tmp, path)
     return rows
 
 
