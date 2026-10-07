@@ -174,12 +174,16 @@ export default function App() {
               <span><i className="sw" style={{ background: 'var(--ema20)' }} />EMA 20</span>
               <span><i className="sw" style={{ background: 'var(--ema50)' }} />EMA 50</span>
               {feed.bars.length >= 200 && <span><i className="sw dash" />EMA 200</span>}
-              <span><i className="sw box" style={{ background: 'var(--zone-sell)', outline: '1px solid var(--down)' }} />Zona sell</span>
-              <span><i className="sw box" style={{ background: 'var(--zone-buy)', outline: '1px solid var(--up)' }} />Zona buy</span>
+              {zones.some((z) => z.side === 'sell') && <span><i className="sw box" style={{ background: 'var(--zone-sell)', outline: '1px solid var(--down)' }} />Zona sell</span>}
+              {zones.some((z) => z.side === 'buy') && <span><i className="sw box" style={{ background: 'var(--zone-buy)', outline: '1px solid var(--up)' }} />Zona buy</span>}
               {a?.amd?.rangeAsia && <span><i className="sw box" style={{ background: 'var(--zone-range)', outline: '1px solid var(--muted)' }} />Range Asia</span>}
-              <span><i className="sw" style={{ background: 'var(--accent)' }} />Entry</span>
-              <span><i className="sw" style={{ background: 'var(--down)' }} />Stop loss</span>
-              <span><i className="sw" style={{ background: 'var(--up)' }} />Target</span>
+              {setup && (
+                <>
+                  <span><i className="sw" style={{ background: 'var(--accent)' }} />Entry</span>
+                  <span><i className="sw" style={{ background: 'var(--down)' }} />Stop loss</span>
+                  <span><i className="sw" style={{ background: 'var(--up)' }} />Target</span>
+                </>
+              )}
             </div>
           </section>
           {a && (

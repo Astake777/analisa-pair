@@ -4,9 +4,10 @@ POI = candle berlawanan terakhir (OB) sebelum candle displacement (body >= disp 
 searah bias (EMA20 vs EMA50 di semua TF bias mode). Skor konfluensi +1 per: pivot harian di dalam zona,
 angka bulat kelipatan $5 di dalam zona, OB menyapu low/high swing sebelumnya, FVG >= 0.5 ATR.
 Entry: harga masuk POI, buat ekstrem (sweep), lalu close 1m menembus high/low `lb` candle sebelum ekstrem (CHoCH).
-Limit di `masuk` x kaki CHoCH dari ekstrem, SL = ekstrem -/+ pad; risk wajib min_sl..max_sl (3.5 = 35 pips,
-1 pip = $0.10). TP1 = entry +/- max(tp_min, rr x risk). Satu POI = satu sinyal; POI hangus kalau close 1m
-menembus sisi jauh - pad sebelum CHoCH, atau umurnya lewat.
+SL = ekstrem -/+ pad. Tepi pertama zona = SL +/- sl_jarak (30-35 pips, 1 pip = $0.10), zona selebar `zona`
+(20 pips) dari tepi pertama ke arah SL. Limit di tepi pertama, jadi risk = sl_jarak. TP1 = entry +/- max(tp_min,
+rr x risk). Satu POI = satu sinyal; POI hangus kalau close 1m menembus sisi jauh - pad sebelum CHoCH,
+atau umurnya lewat.
 Self-check: python strategi/sniper.py --selftest
 Sweep parameter (in-sample memilih, out-of-sample melapor): python strategi/sniper.py --sweep [mode]
 """
@@ -19,10 +20,10 @@ from indikator import atr, ema, kolom, tutup  # noqa: E402
 from regime import MODES, STEP  # noqa: E402
 
 PARAMS = {"poi": "15m", "disp": 1.5, "cari_ob": 3, "zona_max": 10.0, "min_skor": 1, "umur_jam": 12,
-          "lb": 5, "masuk": 0.5, "pad": 0.3, "min_sl": 1.0, "max_sl": 3.5, "rr": 3.0, "tp_min": 10.0}
+          "lb": 3, "pad": 0.5, "zona": 2.0, "sl_jarak": 3.5, "rr": 3.0, "tp_min": 10.0}
 SIM = "1m"            # SL beberapa dollar: simulasi di 1m
 EXPIRE_S = 3600       # limit berlaku 1 jam setelah CHoCH
-GRID = {"poi": ["15m", "1h"], "min_skor": [0, 1, 2], "masuk": [0.3, 0.5], "lb": [3, 5]}
+GRID = {"poi": ["5m", "15m"], "disp": [1.2, 1.5], "min_skor": [0, 1, 2], "lb": [2, 3], "sl_jarak": [3.0, 3.5]}
 
 
 def arah_bias(by_tf, tfs):
@@ -95,9 +96,12 @@ def poi_list(by_tf, mode, p):
     return out
 
 
-def signals(by_tf, mode, params=PARAMS):
+def signals(by_tf, mode, params=PARAMS, stat=None):
+    """stat (dict, opsional) diisi hitungan corong: poi, masuk, choch."""
     p = params
     pois = poi_list(by_tf, mode, p)
+    stat = stat if stat is not None else {}
+    stat.update(poi=len(pois), masuk=0, choch=0)
     t, o, h, l, c = kolom(by_tf["1m"])
     out, aktif, nxt = [], [], 0
     umur = p["umur_jam"] * 3600
@@ -117,6 +121,7 @@ def signals(by_tf, mode, params=PARAMS):
             if z["masuk_i"] is None:
                 if (l[j] <= hi) if s > 0 else (h[j] >= lo):
                     z["masuk_i"] = z["ext_i"] = j
+                    stat["masuk"] += 1
                 tetap.append(z)
                 continue
             if (l[j] < l[z["ext_i"]]) if s > 0 else (h[j] > h[z["ext_i"]]):
@@ -130,17 +135,19 @@ def signals(by_tf, mode, params=PARAMS):
             if not ((c[j] > garis) if s > 0 else (c[j] < garis)):
                 tetap.append(z)
                 continue
+            stat["choch"] += 1
             ujung = l[e] if s > 0 else h[e]
-            entry = r2(ujung + s * p["masuk"] * abs(c[j] - ujung))
             sl = r2(ujung - s * p["pad"])
-            risk = abs(entry - sl)
-            if p["min_sl"] <= risk <= p["max_sl"]:
-                jarak = max(p["tp_min"], p["rr"] * risk)
-                out.append({"time": T, "side": "buy" if s > 0 else "sell", "entry": entry, "sl": sl,
-                            "tp": [r2(entry + s * jarak)], "zona": [r2(lo), r2(hi)], "skor": z["skor"],
-                            "alasan": f"POI {z['tf']} {'demand' if s > 0 else 'supply'} {lo:.2f}-{hi:.2f} "
-                                      f"({z['alasan']}), sweep {ujung:.2f} lalu CHoCH 1m, SL {risk * 10:.0f} pips"})
-            # POI terpakai (sinyal keluar atau SL tidak muat)
+            entry = r2(sl + s * p["sl_jarak"])
+            risk = p["sl_jarak"]
+            jauh = r2(entry - s * p["zona"])
+            out.append({"time": T, "side": "buy" if s > 0 else "sell", "entry": entry, "sl": sl,
+                        "tp": [r2(entry + s * max(p["tp_min"], p["rr"] * risk))],
+                        "zona": sorted([entry, jauh]), "poi": [r2(lo), r2(hi)], "skor": z["skor"],
+                        "alasan": f"POI {z['tf']} {'demand' if s > 0 else 'supply'} {lo:.2f}-{hi:.2f} "
+                                  f"({z['alasan']}), sweep {ujung:.2f} lalu CHoCH 1m; zona {p['zona'] * 10:.0f} pips, "
+                                  f"SL {risk * 10:.0f} pips dari tepi pertama"})
+            # POI terpakai setelah CHoCH
         aktif = tetap
     return out
 
@@ -186,10 +193,12 @@ def _selftest():
     assert s and all(x["side"] == "buy" for x in s), len(s)
     for x in s:
         risk = x["entry"] - x["sl"]
-        assert 1.0 <= risk <= 3.5 + 1e-9, x
-        assert x["tp"][0] - x["entry"] >= 10 - 1e-9 and x["tp"][0] - x["entry"] >= 3 * risk - 0.02, x
-    assert not signals(by, "scalp", {**p, "max_sl": 0.5})
+        assert abs(risk - 3.5) < 0.011 and x["zona"] == [round(x["entry"] - 2, 2), x["entry"]], x
+        assert x["tp"][0] - x["entry"] >= 10.5 - 0.011, x
     assert not signals(by, "scalp", {**p, "min_skor": 5})
+    st = {}
+    signals(by, "scalp", p, st)
+    assert st["poi"] >= st["masuk"] >= st["choch"] >= len(s) > 0, st
     T = by["1m"][int(len(by["1m"]) * 0.7)][0]
     full = [x for x in s if x["time"] <= T]
     assert full == signals(_potong(by, T), "scalp", p), "tidak kausal"
@@ -206,9 +215,13 @@ def sweep(mode="scalp"):
     hasil, keys = [], list(GRID)
     for combo in itertools.product(*GRID.values()):
         p = {**PARAMS, **dict(zip(keys, combo))}
-        tr = simulasi(by["1m"], [s for s in signals(by, mode, p) if s["time"] >= is0], 60, EXPIRE_S // 60)
+        st = {}
+        sig = [s for s in signals(by, mode, p, st) if s["time"] >= is0]
+        tr = simulasi(by["1m"], sig, 60, EXPIRE_S // 60)
         ins, oos = metrik([x for x in tr if x["masuk"] < oos0]), metrik([x for x in tr if x["masuk"] >= oos0])
         hasil.append((dict(zip(keys, combo)), ins, oos, tr))
+        print(f"corong {dict(zip(keys, combo))}: POI {st['poi']} -> masuk zona {st['masuk']} -> CHoCH {st['choch']} "
+              f"-> sinyal 60 hari {len(sig)} -> terisi {len(tr)}", flush=True)
     f = lambda m: "-" if m["trades"] == 0 else \
         f"{m['trades']:>3} tr  win {m['winrate'] * 100:>3.0f}%  exp {m['expectancy']:+.2f}R  PF {m['profit_factor']}"
     for kombi, ins, oos, _ in sorted(hasil, key=lambda x: -(x[1]["expectancy"] if x[1]["trades"] else -9)):

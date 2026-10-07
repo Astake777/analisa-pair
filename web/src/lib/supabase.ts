@@ -11,6 +11,7 @@ export type Side = 'sell' | 'buy'
 export type Setup = {
   side: Side; label?: string; entry: number; zone?: [number, number]; sl: number; risk?: number
   tp?: number[]; rr?: number[]; status?: string; trigger?: string; batal?: string; eksperimen?: string
+  langkah?: string[]; alasan?: { entry?: string; sl?: string; tp?: string }
 }
 export type Driver = {
   sym: string; label: string; relasi: string; last: number; chg: number; chgPct: number; series?: [number, number][]

@@ -144,7 +144,8 @@ export default function Chart({ bars, shift, setup, zones, levels, emptyText }: 
       if (price == null) return
       lines.current.push(a.candles.createPriceLine({ price: price + shift, color, lineWidth: 1, lineStyle: style, axisLabelVisible: true, title }))
     }
-    for (const lv of keyLevels(levels, live.current.bars.at(-1)?.close, setup)) {
+    // Saat ada setup, chart hanya memuat garis setup supaya tidak tertukar dengan S/R.
+    for (const lv of setup ? [] : keyLevels(levels, live.current.bars.at(-1)?.close, setup)) {
       if (lv.kind === 'pemicu-buy') add(lv.price, css('--up'), 'BUY jika tembus', LineStyle.Dashed)
       else if (lv.kind === 'pemicu-sell') add(lv.price, css('--down'), 'SELL jika tembus', LineStyle.Dashed)
       else add(lv.price, css('--muted'), lv.label.split(' (')[0], LineStyle.Dotted)
