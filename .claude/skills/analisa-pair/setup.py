@@ -21,6 +21,7 @@ from pemilih import pilih, terbaru  # noqa: E402
 from regime import MODES, STEP, TFS, regime_sekarang  # noqa: E402
 from strategi import REGISTRY  # noqa: E402
 from strategi.amd import fase_sekarang  # noqa: E402
+import filter_kondisi  # noqa: E402
 
 LABEL = {"1d": "1D", "4h": "4H", "1h": "1H", "30m": "30m", "15m": "15m", "5m": "5m"}
 STATUS = [("AKTIF", "SETUP AKTIF"), ("SIAP", "SIAP"), ("TUNGGU PULLBACK", "TUNGGU PULLBACK")]
@@ -127,10 +128,18 @@ def bangun(by_tf, pair, mode, now, price, events=(), rows_bt=(), basis=None, sum
     lv = levels(closed, m, price, amd, atr_e)
     notes = [f"Sumber candle {sumber}." if sumber else "", f"ATR {m['entry']} {atr_e:.2f}."]
     setups = []
-    sig = None
+    sig, kondisi = None, None
     if pick["terpilih"] != "NO TRADE":
         sigs = REGISTRY[pick["terpilih"]].signals(closed, mode)
         sig = sinyal_aktif(sigs, closed[m["trigger"]], STEP[m["trigger"]], now, EXPIRE * STEP[m["entry"]])
+        if sig:
+            ctx, lolos = filter_kondisi.Konteks(closed, mode, events).baca(sig["time"], sig["side"])
+            aktif = filter_kondisi.terpakai(pick["terpilih"], mode)
+            gagal = [f for f in aktif if not lolos[f]]
+            kondisi = {**ctx, "filter": aktif, "lolos": lolos, "gagal": gagal}
+            if gagal:
+                notes.append(f"Sinyal {pick['terpilih']} {sig['side']} ditolak filter kondisi pasar: {', '.join(gagal)}.")
+                sig = None
         if sig:
             zone = sig.get("zona") or [sig["entry"] - ZONA_ATR * atr_e, sig["entry"] + ZONA_ATR * atr_e]
             jauh = [x["price"] for x in lv if (x["price"] < sig["entry"]) == (sig["side"] == "sell")]
@@ -176,7 +185,8 @@ def bangun(by_tf, pair, mode, now, price, events=(), rows_bt=(), basis=None, sum
            "pair": pair, "mode": mode, "gaya": mode, "price": r2(price),
            "timeframes": {"bias": m["bias"], "entry": entry_tfs}, "status": status, "keyakinan": keyakinan,
            "bias": bias, "levels": lv, "zones": zones, "setups": setups,
-           "strategi": {k: pick[k] for k in ("regime", "terpilih", "alasan", "kandidat", "izinKontra", "runId")},
+           "strategi": {**{k: pick[k] for k in ("regime", "terpilih", "alasan", "kandidat", "izinKontra", "runId")},
+                        "kondisi": kondisi},
            "amd": amd, "notes": [n for n in notes if n]}
     if basis is not None:
         out["basis"] = {"sumber": "XAUT Binance dikoreksi ke spot gold-api", "nilai": basis}
