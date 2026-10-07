@@ -19,13 +19,16 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from indikator import atr, ema, kolom, tutup  # noqa: E402
 from regime import MODES, STEP  # noqa: E402
 from strategi import msnr  # noqa: E402
+import orderflow  # noqa: E402
 
-# validasi.py 8 Okt 2026 (200 hari): kombinasi terbaik seluruh sampel dan lipatan OOS terakhir
+# validasi.py 8 Okt 2026 (200 hari): dasar terbaik + delta searah (terpilih di semua lipatan OOS; vp/avwap tidak)
 PARAMS = {"poi": "15m", "disp": 1.5, "cari_ob": 3, "zona_max": 10.0, "min_skor": 2, "umur_jam": 12,
-          "lb": 3, "pad": 0.5, "zona": 2.0, "sl_jarak": 3.0, "rr": 3.0, "tp_min": 10.0, "msnr": True}
+          "lb": 3, "pad": 0.5, "zona": 2.0, "sl_jarak": 3.0, "rr": 3.0, "tp_min": 10.0, "msnr": True,
+          "vp": False, "avwap": False, "delta": True}
 SIM = "1m"            # SL beberapa dollar: simulasi di 1m
 EXPIRE_S = 3600       # limit berlaku 1 jam setelah CHoCH
-GRID = {"msnr": [False, True], "disp": [1.2, 1.5], "min_skor": [1, 2], "lb": [2, 3], "sl_jarak": [3.0, 3.5]}  # POI 5m terbukti rugi (sweep 8 Okt)
+# Dasar (msnr, disp, min_skor, lb) sudah dipilih validasi 8 Okt; grid kini menguji konfluensi orderflow.
+GRID = {"vp": [False, True], "avwap": [False, True], "delta": [False, True], "sl_jarak": [3.0, 3.5]}
 
 
 def arah_bias(by_tf, tfs):
@@ -64,6 +67,9 @@ def poi_list(by_tf, mode, p):
     a = atr(h, l, c)
     out = []
     papan, lv, nlv, maju = msnr.Papan(), msnr.levels(by_tf[tf], step), 0, 0
+    m5 = by_tf.get("5m", [])
+    vw = orderflow.Vwap(m5, 300) if p.get("avwap") and m5 else None
+    profil_hari = {}
     for i in range(4, len(t) - 1):
         if p.get("msnr"):  # papan level MSNR diperbarui sampai candle i+1 (saat POI diketahui)
             while maju <= i + 1:
@@ -106,6 +112,20 @@ def poi_list(by_tf, mode, p):
                 continue
             skor += 1
             alasan.append("level MSNR fresh")
+        if p.get("vp"):  # POC/VAH/VAL hari sebelumnya (candle 5m) di dalam zona
+            d = T - T % 86400
+            if d not in profil_hari:
+                profil_hari[d] = orderflow.profil(m5, d - 86400, d) if m5 else None
+            pr = profil_hari[d]
+            if not pr or not any(lo - 0.5 <= v <= hi + 0.5 for v in pr.values()):
+                continue
+            alasan.append("volume profile kemarin")
+        if vw:  # AVWAP harian atau mingguan dekat zona
+            j = orderflow.jangkar(T)
+            v = [x for x in (vw.nilai(j["hari"], T), vw.nilai(j["minggu"], T)) if x is not None]
+            if not any(lo - 1 <= x <= hi + 1 for x in v):
+                continue
+            alasan.append("AVWAP")
         if skor >= p["min_skor"]:
             out.append({"t_ok": T, "side": side, "lo": lo, "hi": hi, "skor": skor, "tf": tf,
                         "alasan": ", ".join(alasan) or "tanpa konfluensi tambahan"})
@@ -118,7 +138,8 @@ def signals(by_tf, mode, params=PARAMS, stat=None):
     pois = poi_list(by_tf, mode, p)
     stat = stat if stat is not None else {}
     stat.update(poi=len(pois), masuk=0, choch=0)
-    t, o, h, l, c = kolom(by_tf["1m"])
+    rows1 = by_tf["1m"]
+    t, o, h, l, c = kolom(rows1)
     out, aktif, nxt = [], [], 0
     umur = p["umur_jam"] * 3600
     r2 = lambda x: round(x, 2)
@@ -152,6 +173,10 @@ def signals(by_tf, mode, params=PARAMS, stat=None):
                 tetap.append(z)
                 continue
             stat["choch"] += 1
+            if p.get("delta"):  # agresor searah di kaki CHoCH (delta taker Binance)
+                dl = [orderflow.delta(rows1[x]) for x in range(e, j + 1)]
+                if None in dl or sum(dl) * s <= 0:
+                    continue
             ujung = l[e] if s > 0 else h[e]
             sl = r2(ujung - s * p["pad"])
             entry = r2(sl + s * p["sl_jarak"])
