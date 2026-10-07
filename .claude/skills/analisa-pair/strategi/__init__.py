@@ -16,6 +16,8 @@ REGISTRY = {
     "amd": amd,
     # "alchemist": alchemist,  # menunggu PDF strategi dari user
 }
+# tetap di-backtest dan tampil sebagai fase, tapi tidak boleh dipilih untuk sinyal (keputusan user 2026-10-07)
+HANYA_INDIKATOR = {"amd"}
 T0 = 1785715200  # Senin 3 Agu 2026 00:00 UTC
 
 
