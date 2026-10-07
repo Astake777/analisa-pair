@@ -4,16 +4,15 @@ import type { Band } from './chart/zones'
 import { TFS, useLiveFeed, type TF } from './feed'
 import { useLiveDrivers } from './feed/yahoo'
 import { age, fmt, marketOpen, signed, statusKind, store, wibTime } from './lib/format'
-import { FIXTURE, type Driver, useAnalyses, useSetupLog, useBacktest, useMacro, useNewsOutlook, type Mode } from './lib/supabase'
+import { FIXTURE, useAnalyses, useSetupLog, useBacktest, useMacro, useNewsOutlook, type Mode } from './lib/supabase'
 import { Amd, Bias, Calendar, Headlines, History, Levels, Notes, PrediksiNews, Strategi } from './panels/Analysis'
-import { Drivers, Makro } from './panels/Drivers'
-import { Outlook } from './panels/Outlook'
+import { ASET, Drivers, Makro } from './panels/Drivers'
+import { Menjelang, Outlook } from './panels/Outlook'
 import { RekamJejak, Setups } from './panels/Setups'
 
 const PAIR = 'XAUUSD'
 const MODES: Mode[] = ['scalp', 'intraday', 'swing']
 const NO_LEVELS: { price: number; label: string; kind: string }[] = []
-const NO_DRIVERS: Driver[] = []
 const hasNotif = typeof Notification !== 'undefined'
 
 // Dua bunyi pendek; tanpa file audio.
@@ -71,7 +70,7 @@ export default function App() {
   const news = useNewsOutlook(PAIR)
   const macro = useMacro()
   const log = useSetupLog(PAIR)
-  const drv = useLiveDrivers(an.rows?.[0]?.payload?.drivers ?? NO_DRIVERS)
+  const drv = useLiveDrivers(ASET)
 
   const [izin, setIzin] = useState(() => (hasNotif ? Notification.permission : 'denied'))
   const [kabar, setKabar] = useState<string | null>(null)
@@ -189,7 +188,7 @@ export default function App() {
             <span className="price num">{fmt(price, 2)}</span>
             {chg != null && base && (
               <span className={`chg num ${chg > 0 ? 'up' : chg < 0 ? 'down' : 'flat'}`}>
-                {chg > 0 ? '▲' : chg < 0 ? '▼' : ''} {signed(chg)} ({signed((chg / base.close) * 100, 2)}%) 24j
+                {chg > 0 ? '▲' : chg < 0 ? '▼' : ''} {signed(chg)} ({signed((chg / base.close) * 100, 2)}%) {tf === 'W1' ? 'minggu ini' : tf === 'D1' ? 'sejak 07:00 WIB' : '24j'}
               </span>
             )}
           </div>
@@ -210,6 +209,7 @@ export default function App() {
 
       <div className="main">
         <div className="left">
+          <Menjelang rows={news.rows} now={now} />
           <section className="card" aria-labelledby="chartTitle">
             <div className="card-head">
               <h2 id="chartTitle">Chart dan zona entry</h2>
@@ -274,13 +274,6 @@ export default function App() {
         </aside>
       </div>
 
-      {a && (
-        <section className="card" aria-labelledby="drvTitle">
-          <div className="card-head"><h2 id="drvTitle">Indeks pendukung</h2><span className="sub">{drv.live ? 'Live, diperbarui tiap 20 detik (Yahoo, bisa tertunda beberapa menit)' : 'Dari analisis terakhir'} · perubahan 24 jam</span></div>
-          <Drivers drivers={drv.drivers} side={setup?.side} />
-        </section>
-      )}
-
       <div className="lower">
         {a && (
           <>
@@ -293,6 +286,13 @@ export default function App() {
           </>
         )}
         {macro.rows && <Makro rows={macro.rows} />}
+        <section className="card full" aria-labelledby="drvTitle">
+          <div className="card-head">
+            <h2 id="drvTitle">Aset pendukung</h2>
+            <span className="sub">Yahoo, diperbarui tiap 20 detik dan bisa tertunda beberapa menit · perubahan 24 jam{setup ? ` · dibanding ${setup.side.toUpperCase()} di chart` : ''}</span>
+          </div>
+          <Drivers items={drv} side={setup?.side} />
+        </section>
         <Outlook rows={news.rows} error={news.error} />
         {an.rows && an.rows.length > 0 && <History rows={an.rows} off={off} />}
       </div>

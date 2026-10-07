@@ -63,7 +63,9 @@ def parse_oanda(payload):
 
 
 def parse_binance(klines):
-    return [[k[0] // 1000, float(k[1]), float(k[2]), float(k[3]), float(k[4]), float(k[5])] for k in klines]
+    """Kolom ke-7 = volume taker buy (agresor beli); delta orderflow = 2 x taker buy - volume."""
+    return [[k[0] // 1000, float(k[1]), float(k[2]), float(k[3]), float(k[4]), float(k[5]), float(k[9])]
+            for k in klines]
 
 
 def merge(old, new):
@@ -74,14 +76,18 @@ def merge(old, new):
 
 
 def aggregate(rows, sec):
+    """Gabung candle ke TF sec; kolom volume (dan taker buy kalau ada) dijumlahkan."""
     out = []
-    for t, o, h, lo, c, v in rows:
+    for r in rows:
+        t, o, h, lo, c = r[:5]
         b = t - t % sec
         if out and out[-1][0] == b:
             cur = out[-1]
-            cur[2], cur[3], cur[4], cur[5] = max(cur[2], h), min(cur[3], lo), c, cur[5] + v
+            cur[2], cur[3], cur[4] = max(cur[2], h), min(cur[3], lo), c
+            for k in range(5, len(cur)):
+                cur[k] += r[k]
         else:
-            out.append([b, o, h, lo, c, v])
+            out.append([b, o, h, lo, c, *r[5:]])
     return out
 
 
@@ -225,7 +231,7 @@ def spot_basis(pair, ref):
 
 def geser(by_tf, b):
     """Tambah basis b ke o/h/l/c semua candle."""
-    return {tf: [[r[0], r[1] + b, r[2] + b, r[3] + b, r[4] + b, r[5]] for r in rows] for tf, rows in by_tf.items()}
+    return {tf: [[r[0], r[1] + b, r[2] + b, r[3] + b, r[4] + b, *r[5:]] for r in rows] for tf, rows in by_tf.items()}
 
 
 def fetch(sym, tf, refresh=False):
@@ -291,8 +297,10 @@ def _selftest():
     assert symbol("xauusd", "auto", cr) == "OANDA_XAU_USD" and symbol("XAUUSD", "yahoo", None) == "GC=F"
     assert symbol("BTCUSD", "auto", cr) == "BTC-USD" and symbol("XAUUSD", "yahoo", cr) == "GC=F"
     assert symbol("XAUUSD", "auto", None) == "BINANCE_XAUTUSDT" == symbol("XAUUSD", "binance", cr)
-    kl = [[1791379200000, "4101.0", "4103.07", "4096.52", "4096.52", "41.0512", 1791379499999, "1", 396, "0", "0", "0"]]
-    assert parse_binance(kl) == [[1791379200, 4101.0, 4103.07, 4096.52, 4096.52, 41.0512]]
+    kl = [[1791379200000, "4101.0", "4103.07", "4096.52", "4096.52", "41.0512", 1791379499999, "1", 396, "30.5", "0", "0"]]
+    assert parse_binance(kl) == [[1791379200, 4101.0, 4103.07, 4096.52, 4096.52, 41.0512, 30.5]]
+    assert aggregate([[0, 1, 2, 0.5, 1.5, 10, 6], [60, 1.5, 3, 1, 2, 5, 1]], 300) == [[0, 1, 3, 0.5, 2, 15, 7]]
+    assert aggregate([[0, 1, 2, 0.5, 1.5, 10]], 300) == [[0, 1, 2, 0.5, 1.5, 10]]
     assert geser({"5m": [[0, 10, 12, 9, 11, 5]]}, -5) == {"5m": [[0, 5, 7, 4, 6, 5]]}
     assert _path("OANDA_XAU_USD", "4h").endswith("OANDA_XAU_USD_4h.json")
     b = bersih({"5m": [[0, 1, 1, 1, 1, 0], [301, 1, 1, 1, 1, 0]], "1d": [[14400, 1, 1, 1, 1, 0]]})

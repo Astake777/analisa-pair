@@ -4,9 +4,9 @@ import { startOanda } from './oanda'
 
 declare const __OANDA_ENABLED__: boolean
 
-export type TF = 'M1' | 'M5' | 'M15' | 'M30' | 'H1' | 'H4'
-export const TFS: TF[] = ['M1', 'M5', 'M15', 'M30', 'H1', 'H4']
-export const TF_SEC: Record<TF, number> = { M1: 60, M5: 300, M15: 900, M30: 1800, H1: 3600, H4: 14400 }
+export type TF = 'M1' | 'M5' | 'M15' | 'M30' | 'H1' | 'H4' | 'D1' | 'W1'
+export const TFS: TF[] = ['M1', 'M5', 'M15', 'M30', 'H1', 'H4', 'D1', 'W1']
+export const TF_SEC: Record<TF, number> = { M1: 60, M5: 300, M15: 900, M30: 1800, H1: 3600, H4: 14400, D1: 86400, W1: 604800 }
 
 export type Bar = { time: number; open: number; high: number; low: number; close: number }
 export type FeedStatus = 'connecting' | 'live' | 'reconnecting' | 'error'

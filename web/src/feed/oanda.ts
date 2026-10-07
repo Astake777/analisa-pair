@@ -15,7 +15,7 @@ export const startOanda: Start = (tf, emit, fail) => {
   async function connect() {
     ctrl = new AbortController()
     try {
-      const r = await fetch(`/oanda/api/v3/instruments/XAU_USD/candles?granularity=${tf}&count=1500&price=M`, { signal: ctrl.signal })
+      const r = await fetch(`/oanda/api/v3/instruments/XAU_USD/candles?granularity=${tf === 'D1' ? 'D' : tf === 'W1' ? 'W' : tf}&count=1500&price=M`, { signal: ctrl.signal })
       if (!r.ok) throw new Error(`candles HTTP ${r.status}`)
       const { candles } = (await r.json()) as { candles: Candle[] }
       bars = candles.map((c) => ({ time: sec(c.time), open: +c.mid.o, high: +c.mid.h, low: +c.mid.l, close: +c.mid.c }))

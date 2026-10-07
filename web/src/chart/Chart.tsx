@@ -174,7 +174,9 @@ export default function Chart({ bars, shift, setup, zones, levels, emptyText }: 
       const y = a.candles.priceToCoordinate(last.close + sh)
       if (y == null) return setCd(null)
       const h = Math.floor(left / 3600), m = Math.floor((left % 3600) / 60), sec = left % 60
-      const text = (h ? `${h}:${String(m).padStart(2, '0')}` : String(m).padStart(2, '0')) + ':' + String(sec).padStart(2, '0')
+      const mm = String(m).padStart(2, '0'), ss = String(sec).padStart(2, '0')
+      // Candle W1 bisa >24 jam lagi: tampil "6h 23:59" (hari, jam:menit) supaya muat di sumbu harga.
+      const text = h >= 24 ? `${Math.floor(h / 24)}h ${String(h % 24).padStart(2, '0')}:${mm}` : (h ? `${h}:${mm}` : mm) + ':' + ss
       setCd({ top: y - 10, width: a.chart.priceScale('right').width(), text, up: last.close >= last.open, price: last.close + sh })
     }
     tickRef.current = tick

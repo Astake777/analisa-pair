@@ -273,4 +273,33 @@ tr:last-child td { border-bottom: 0; }
 .log li { display: grid; grid-template-columns: 40px 1fr auto auto; gap: 8px; align-items: baseline; }
 .log .up { color: var(--up); font-weight: 700; } .log .down { color: var(--down); font-weight: 700; }
 .card code { overflow-wrap: anywhere; }
-".card code { overflow-wrap: anywhere; }"  
+
+/* aset pendukung: 5 kolom di desktop, 2 di ponsel */
+.drivers.aset { grid-template-columns: repeat(auto-fill, minmax(min(100%, clamp(150px, 18vw, 240px)), 1fr)); gap: 12px; }
+.aset .drv { border: 1px solid var(--line); border-radius: var(--r-lg); padding: 10px; align-content: start; }
+.aset .drv-top { flex-wrap: wrap; }
+.aset .drv-name .sub { font-size: 12px; font-weight: 500; }
+.drv-state { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 12px; }
+.spin.sm { width: 14px; height: 14px; }
+
+/* skenario news di tabel outlook; detail tetap selebar kotak tabel walau tabel di-scroll ke samping */
+.tbl-wrap.tall { container-type: inline-size; }
+.exp-btn { margin-left: 8px; min-height: 28px; padding: 2px 10px; border-radius: var(--r-md); border: 1px solid var(--line); background: var(--raised); cursor: pointer; font-weight: 600; font-size: 12px; white-space: nowrap; }
+.exp-btn[aria-expanded="true"] { border-color: var(--accent); }
+@media (pointer: coarse) { .exp-btn { min-height: var(--tap); } }
+tr.det > td { padding: 4px 0 12px; }
+.det-body { position: sticky; left: 0; max-width: 100cqw; padding: 0 8px; display: grid; gap: 8px; }
+.det-body h3 { font-size: 13px; color: var(--ink-strong); margin-top: 4px; }
+.det-body p { margin: 0; }
+.skn-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; }
+.skn { border: 1px solid var(--line); border-radius: var(--r-lg); padding: 10px; display: grid; gap: 4px; align-content: start; }
+.skn-top { display: flex; justify-content: space-between; gap: 8px; color: var(--ink-strong); }
+.det-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.det-list .chips { margin: 4px 0 0; }
+
+/* strip menjelang news di atas chart */
+.soon { background: var(--card); border: 1px solid var(--accent); border-radius: var(--r-xl); padding: 12px 16px; display: grid; gap: 6px; }
+.soon-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.soon-head h2 { font-size: 14px; color: var(--accent-text); }
+.soon-head b { color: var(--ink-strong); }
+.soon ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; font-size: 13px; }

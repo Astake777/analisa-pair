@@ -54,6 +54,18 @@ export type NewsRow = {
   dampak: { panas?: string; dingin?: string } | null
   lean: { arah?: string; kekuatan?: string; alasan?: string } | null
   hasil: Record<string, unknown> | null
+  // Kolom baru; bisa belum ada di database, jadi opsional.
+  skenario?: Skenario[] | null
+  pendukung?: Pendukung | null
+}
+export type Skenario = {
+  nama: 'panas' | 'sesuai' | 'dingin'; syarat: string; peluang: number | null; arahEmas: 'BUY' | 'SELL' | 'netral'
+  gerak15m: number | null; gerak1h: number | null; konfirmasi: string; batal: string
+}
+export type Pendukung = {
+  indikator?: { nama: string; nilai: string; arah: 'panas' | 'dingin' | 'netral'; catatan: string }[]
+  polymarket?: { judul: string; url: string; volume: number; outcomes: { label: string; peluang: number }[] }[]
+  aset?: { label: string; sym: string; relasi: string }[]
 }
 export type BacktestRow = {
   run_id: string; run_at: string; strategy: string; regime: string; sample: 'in' | 'oos'; trades: number

@@ -1,7 +1,33 @@
 import { applyTick, backoff, throttle, TF_SEC, type Bar, type Start, type TF } from './index'
 
-const IV: Record<TF, string> = { M1: '1m', M5: '5m', M15: '15m', M30: '30m', H1: '1h', H4: '4h' }
+const IV: Record<TF, string> = { M1: '1m', M5: '5m', M15: '15m', M30: '30m', H1: '1h', H4: '4h', D1: '1d', W1: '1w' }
 type Kline = { t: number; o: string; h: string; l: string; c: string }
+type N = (number | null)[]
+type YChart = { chart: { result?: { timestamp?: number[]; indicators: { quote: { open: N; high: N; low: N; close: N }[] } }[] } }
+
+// XAUT di Binance baru ada sejak 26 Mar 2026; D1/W1 disambung dengan GC=F Yahoo yang lebih tua.
+async function gcHistory(tf: TF): Promise<Bar[]> {
+  const r = await fetch(`/yahoo/v8/finance/chart/GC%3DF?interval=${tf === 'W1' ? '1wk' : '1d'}&range=5y`)
+  if (!r.ok) return []
+  const res = ((await r.json()) as YChart).chart.result?.[0]
+  const q = res?.indicators.quote[0]
+  if (!res?.timestamp || !q) return []
+  // Yahoo memberi jam buka New York; dibulatkan ke 00:00 UTC supaya sejajar dengan candle Binance (W1 = Senin).
+  return res.timestamp.flatMap((t, i) => {
+    const [o, h, l, c] = [q.open[i], q.high[i], q.low[i], q.close[i]]
+    return o == null || h == null || l == null || c == null ? [] : [{ time: Math.floor(t / 86400) * 86400, open: o, high: h, low: l, close: c }]
+  })
+}
+
+// GC=F digeser ke level XAUT pada candle pertama yang ada di keduanya; basis spot lalu berlaku sama ke semua bar.
+function splice(old: Bar[], raw: Bar[]): Bar[] {
+  const t0 = raw[0]?.time
+  const x = t0 == null ? undefined : raw.find((b) => old.some((g) => g.time === b.time))
+  const g = x && old.find((b) => b.time === x.time)
+  if (!x || !g) return raw
+  const d = x.close - g.close
+  return [...old.filter((b) => b.time < t0).map((b) => ({ time: b.time, open: b.open + d, high: b.high + d, low: b.low + d, close: b.close + d })), ...raw]
+}
 
 // XAUT trades at a small premium/discount to spot. basis = gold-api spot minus XAUT, smoothed over ~5 polls.
 export const startBinance: Start = (tf, emit) => {
@@ -10,6 +36,7 @@ export const startBinance: Start = (tf, emit) => {
   let ws: WebSocket | null = null
   let raw: Bar[] = [], disp: Bar[] = []
   let basis: number | null = null, lastRaw: number | null = null, lastTick = 0
+  const hist = tf === 'D1' || tf === 'W1' ? gcHistory(tf).catch(() => []) : Promise.resolve([])
 
   const shift = (b: Bar): Bar =>
     basis == null ? b : { time: b.time, open: b.open + basis, high: b.high + basis, low: b.low + basis, close: b.close + basis }
@@ -48,7 +75,7 @@ export const startBinance: Start = (tf, emit) => {
       const r = await fetch(`https://api.binance.com/api/v3/klines?symbol=XAUTUSDT&interval=${iv}&limit=1000`)
       if (!r.ok) throw new Error(`klines HTTP ${r.status}`)
       const rows = (await r.json()) as [number, string, string, string, string][]
-      raw = rows.map((k) => ({ time: k[0] / 1000, open: +k[1], high: +k[2], low: +k[3], close: +k[4] }))
+      raw = splice(await hist, rows.map((k) => ({ time: k[0] / 1000, open: +k[1], high: +k[2], low: +k[3], close: +k[4] })))
       lastRaw = raw.at(-1)?.close ?? null
       disp = raw.map(shift)
       if (dead) return

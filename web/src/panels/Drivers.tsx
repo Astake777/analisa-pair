@@ -1,4 +1,5 @@
-import type { Driver, MacroRow, Side } from '../lib/supabase'
+import type { MacroRow, Side } from '../lib/supabase'
+import type { Aset, AsetLive } from '../feed/yahoo'
 import { MACRO } from '../lib/supabase'
 import { fmt, signed } from '../lib/format'
 
@@ -22,29 +23,53 @@ export function Spark({ values }: { values: number[] }) {
 const arrow = (n: number) => (n > 0 ? '▲' : n < 0 ? '▼' : '')
 const dc = (n: number) => (n > 0 ? 'up' : n < 0 ? 'down' : 'flat')
 
-export function Drivers({ drivers, side }: { drivers: Driver[]; side?: Side }) {
-  if (!drivers.length) return <p className="sub">Data driver belum tersedia.</p>
+// Daftar tetap aset yang ikut bergerak saat news USD. terbalik = naik menekan emas, searah = naik mendorong emas.
+// US 2Y yield dilewati: simbol Yahoo yang ada (2YY=F) tidak lagi mengirim data intraday.
+export const ASET: Aset[] = [
+  { sym: '^TNX', label: 'US10Y yield', relasi: 'terbalik' },
+  { sym: 'DX-Y.NYB', label: 'DXY', relasi: 'terbalik' },
+  { sym: 'EURUSD=X', label: 'EURUSD', relasi: 'searah' },
+  { sym: 'JPY=X', label: 'USDJPY', relasi: 'terbalik' },
+  { sym: 'SI=F', label: 'Silver', relasi: 'searah' },
+  { sym: 'ES=F', label: 'S&P 500 fut', relasi: 'konteks' },
+  { sym: 'NQ=F', label: 'Nasdaq fut', relasi: 'konteks' },
+  { sym: 'CL=F', label: 'Crude oil', relasi: 'konteks' },
+  { sym: '^VIX', label: 'VIX', relasi: 'konteks' },
+]
+
+export function Drivers({ items, side }: { items: AsetLive[]; side?: Side }) {
   return (
-    <div className="drivers">
-      {drivers.map((d) => {
-        const isYield = d.sym === '^TNX'
-        const val = isYield ? `${fmt(d.last, 3)}%` : fmt(d.last, 2)
-        const chg = isYield ? `${signed(d.chg * 100, 1)} bp` : `${signed(d.chgPct, 2)}%`
-        let tag = <span className="tag ctx">Konteks</span>
-        if (d.relasi !== 'konteks' && side && d.chg !== 0) {
-          const pairDown = d.relasi === 'terbalik' ? d.chg > 0 : d.chg < 0
-          const pro = (side === 'sell') === pairDown
-          tag = <span className={`tag ${pro ? 'pro' : 'con'}`}>{pro ? 'Mendukung' : 'Melawan'} {side.toUpperCase()}</span>
+    <div className="drivers aset">
+      {items.map(({ sym, label, relasi, data: d }) => {
+        let body = <p className="sub drv-state" role="status"><span className="spin sm" aria-hidden="true" />Memuat</p>
+        if (d === null) body = <p className="sub drv-state" role="status">Data Yahoo tidak tersedia, dicoba lagi tiap 20 detik</p>
+        else if (d) {
+          const isYield = sym === '^TNX'
+          const val = isYield ? `${fmt(d.last, 3)}%` : fmt(d.last, d.last < 10 ? 4 : 2)
+          const chg = isYield ? `${signed(d.chg * 100, 1)} bp` : `${signed(d.chgPct, 2)}%`
+          let tag = <span className="tag ctx">Konteks</span>
+          if (relasi !== 'konteks' && d.chg !== 0) {
+            const pairDown = relasi === 'terbalik' ? d.chg > 0 : d.chg < 0
+            const pro = (side === 'sell') === pairDown
+            tag = side
+              ? <span className={`tag ${pro ? 'pro' : 'con'}`}>{pro ? 'Mendukung' : 'Melawan'} {side.toUpperCase()}</span>
+              : <span className={`tag ${pairDown ? 'con' : 'pro'}`}>{pairDown ? 'Menekan emas' : 'Mendorong emas'}</span>
+          }
+          body = (
+            <>
+              <div className="drv-top">
+                <span className="drv-val num">{val}</span>
+                <span className={`num ${dc(d.chg)}`}>{arrow(d.chg)} {chg}</span>
+              </div>
+              <Spark values={(d.series ?? []).map((p) => p[1])} />
+              {tag}
+            </>
+          )
         }
         return (
-          <div className="drv" key={d.sym}>
-            <div className="drv-top">
-              <span className="drv-name">{d.label}</span>
-              <span className={`num ${dc(d.chg)}`}>{arrow(d.chg)} {chg}</span>
-            </div>
-            <span className="drv-val num">{val}</span>
-            <Spark values={(d.series ?? []).map((p) => p[1])} />
-            {tag}
+          <div className="drv" key={sym}>
+            <span className="drv-name">{label} <span className="sub">{relasi}</span></span>
+            {body}
           </div>
         )
       })}
