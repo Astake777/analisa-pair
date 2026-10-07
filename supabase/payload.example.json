@@ -1,0 +1,739 @@
+{
+  "updatedAt": "2026-10-07T08:23:00Z",
+  "gaya": "intraday",
+  "status": "TUNGGU NEWS",
+  "keyakinan": "rendah-sedang",
+  "bias": {
+    "1W": {
+      "bias": "Melemah",
+      "rsi": 42.1,
+      "catatan": "MACD bearish, di bawah EMA20 dan EMA50 mingguan"
+    },
+    "1D": {
+      "bias": "Bearish",
+      "rsi": 38.4,
+      "catatan": "Death cross EMA50 di bawah EMA200, stochastic 15 (oversold)"
+    },
+    "4H": {
+      "bias": "Bearish kuat",
+      "rsi": 37.3,
+      "catatan": "ADX 33, harga di bawah semua EMA"
+    },
+    "1H": {
+      "bias": "Bearish",
+      "rsi": 42.3,
+      "catatan": "Di bawah EMA20, MACD mulai bullish"
+    },
+    "15m": {
+      "bias": "Netral",
+      "rsi": 52.8,
+      "catatan": "Sideways"
+    }
+  },
+  "makroKonfirmasi": "DXY 102.30 naik 0.46% mendukung SELL. US10Y turun 4.2bp melawan SELL, jadi keyakinan diturunkan satu level.",
+  "levels": [
+    {
+      "price": 4339,
+      "label": "EMA200 harian",
+      "kind": "resistance"
+    },
+    {
+      "price": 4328,
+      "label": "EMA50 harian",
+      "kind": "resistance"
+    },
+    {
+      "price": 4302,
+      "label": "EMA50 4H",
+      "kind": "resistance"
+    },
+    {
+      "price": 4286,
+      "label": "EMA20 harian, pivot harian",
+      "kind": "resistance"
+    },
+    {
+      "price": 4228,
+      "label": "Zona sell atas: R1 4H",
+      "kind": "zona-sell"
+    },
+    {
+      "price": 4223,
+      "label": "Zona sell bawah: EMA20 4H",
+      "kind": "zona-sell"
+    },
+    {
+      "price": 4131,
+      "label": "Zona buy atas: S1 4H",
+      "kind": "zona-buy"
+    },
+    {
+      "price": 4126,
+      "label": "Zona buy bawah: BB lower harian",
+      "kind": "zona-buy"
+    },
+    {
+      "price": 4088,
+      "label": "S2 4H",
+      "kind": "support"
+    },
+    {
+      "price": 4032,
+      "label": "S1 harian",
+      "kind": "support"
+    }
+  ],
+  "zones": [
+    {
+      "lo": 4223,
+      "hi": 4228,
+      "side": "sell",
+      "label": "Zona sell · EMA20 4H + R1 4H"
+    },
+    {
+      "lo": 4126,
+      "hi": 4131,
+      "side": "buy",
+      "label": "Zona buy · BB lower harian + S1 4H"
+    }
+  ],
+  "setups": [
+    {
+      "side": "sell",
+      "label": "utama",
+      "entry": 4225.5,
+      "zone": [
+        4223,
+        4228
+      ],
+      "sl": 4249.0,
+      "risk": 23.5,
+      "tp": [
+        4131,
+        4088
+      ],
+      "rr": [
+        4.02,
+        5.85
+      ],
+      "status": "TUNGGU PULLBACK ke zona",
+      "trigger": "Candle penolakan 1H di zona dan US10Y naik",
+      "batal": "Close 4H di atas SL"
+    },
+    {
+      "side": "buy",
+      "label": "kontra-tren",
+      "entry": 4128.5,
+      "zone": [
+        4126,
+        4131
+      ],
+      "sl": 4105.0,
+      "risk": 23.5,
+      "tp": [
+        4223,
+        4286
+      ],
+      "rr": [
+        4.02,
+        6.7
+      ],
+      "status": "SIAP, tapi melawan tren",
+      "trigger": "Notulen bernada dovish, US10Y turun di bawah 5.22%, candle penolakan 1H",
+      "batal": "Close 4H di bawah SL"
+    }
+  ],
+  "prediksiNews": [
+    {
+      "event": "FOMC Meeting Minutes",
+      "waktuWIB": "Kam 08 Okt 01:00 WIB",
+      "arah": "Condong SELL",
+      "kekuatan": "lemah",
+      "alasan": "Notulen kemungkinan hanya mengonfirmasi satu kenaikan lagi, yang sudah di harga (88% peluang naik lagi tahun ini). Kejutan hawkish butuh dukungan naik di rapat 28 Okt. Notulen juga mendahului NFP 2 Okt yang lemah.",
+      "batal": "Notulen menyebut kekhawatiran pertumbuhan atau kenaikan satu kali, US10Y turun di bawah 5.22%."
+    },
+    {
+      "event": "Initial Jobless Claims",
+      "waktuWIB": "Kam 08 Okt 19:30 WIB",
+      "arah": "Tidak ada edge",
+      "kekuatan": "",
+      "alasan": "Forecast 200K, previous 197K. Belum ada dua indikator pendahulu yang sepakat soal arah kejutan.",
+      "batal": ""
+    }
+  ],
+  "headlines": [
+    {
+      "title": "Gold Projected to Hit $5,013 as Geopolitical Tensions and Monetary Shifts Drive Market Sentiment",
+      "url": "https://www2.stockmarketwatch.com/stock-market-news/gold-projected-to-hit-5013-as-geopolitical-tensions-and-monetary-shifts-drive-market-sentiment/72662/",
+      "published": "2026-10-06T15:38:18Z",
+      "bacaan": "bullish jangka panjang"
+    },
+    {
+      "title": "Gold Price Resilience Tested Amid Rising Yields and Strong Dollar",
+      "url": "https://www.gurufocus.com/news/9102944/gold-price-resilience-tested-amid-rising-yields-and-strong-dollar",
+      "published": "2026-09-30T09:51:29Z",
+      "bacaan": "bearish (yield dan dollar)"
+    },
+    {
+      "title": "Gold and High-Yield Bonds Face Pressure as Rates Rise (GLD)",
+      "url": "https://www.gurufocus.com/news/9101444/gold-and-highyield-bonds-face-pressure-as-rates-rise-gld",
+      "published": "2026-09-29T13:30:28Z",
+      "bacaan": "bearish (suku bunga naik)"
+    }
+  ],
+  "notes": [
+    "Level teknikal dari data 6 Okt karena scanner TradingView sedang down. Harga, candle dan driver live dari Yahoo.",
+    "Harga memakai futures GC=F. Chart spot broker biasanya sekitar $50 lebih rendah.",
+    "Rekor lean sebelum rilis di sesi ini: 2 benar, 2 salah. Konfirmasi US10Y wajib sebelum masuk.",
+    "Jangan klik saat 01:00 WIB. Masuk paling cepat 01:10 WIB, hanya kalau US10Y searah."
+  ],
+  "pair": "XAUUSD",
+  "priceSymbol": "GC=F",
+  "price": 4151.5,
+  "drivers": [
+    {
+      "sym": "^TNX",
+      "label": "US10Y",
+      "relasi": "terbalik",
+      "last": 5.269,
+      "chg": -0.042,
+      "chgPct": -0.79,
+      "series": [
+        [
+          1790871600,
+          5.215
+        ],
+        [
+          1790875200,
+          5.239
+        ],
+        [
+          1790878800,
+          5.237
+        ],
+        [
+          1790943600,
+          5.197
+        ],
+        [
+          1790947200,
+          5.193
+        ],
+        [
+          1790950800,
+          5.252
+        ],
+        [
+          1790954400,
+          5.26
+        ],
+        [
+          1790958000,
+          5.277
+        ],
+        [
+          1790961600,
+          5.283
+        ],
+        [
+          1790965200,
+          5.277
+        ],
+        [
+          1791202800,
+          5.296
+        ],
+        [
+          1791206400,
+          5.298
+        ],
+        [
+          1791210000,
+          5.328
+        ],
+        [
+          1791213600,
+          5.336
+        ],
+        [
+          1791217200,
+          5.343
+        ],
+        [
+          1791220800,
+          5.345
+        ],
+        [
+          1791224400,
+          5.311
+        ],
+        [
+          1791289200,
+          5.29
+        ],
+        [
+          1791292800,
+          5.29
+        ],
+        [
+          1791296400,
+          5.26
+        ],
+        [
+          1791300000,
+          5.273
+        ],
+        [
+          1791303600,
+          5.277
+        ],
+        [
+          1791307200,
+          5.262
+        ],
+        [
+          1791310800,
+          5.269
+        ]
+      ]
+    },
+    {
+      "sym": "DX-Y.NYB",
+      "label": "DXY",
+      "relasi": "terbalik",
+      "last": 102.249,
+      "chg": 0.22,
+      "chgPct": 0.22,
+      "series": [
+        [
+          1791280800,
+          102.014
+        ],
+        [
+          1791284400,
+          101.802
+        ],
+        [
+          1791288000,
+          101.866
+        ],
+        [
+          1791291600,
+          101.928
+        ],
+        [
+          1791295200,
+          101.854
+        ],
+        [
+          1791298800,
+          101.834
+        ],
+        [
+          1791302400,
+          101.872
+        ],
+        [
+          1791306000,
+          101.811
+        ],
+        [
+          1791309600,
+          101.833
+        ],
+        [
+          1791313200,
+          101.848
+        ],
+        [
+          1791316800,
+          101.843
+        ],
+        [
+          1791320400,
+          101.847
+        ],
+        [
+          1791324000,
+          101.845
+        ],
+        [
+          1791327600,
+          101.914
+        ],
+        [
+          1791331200,
+          101.953
+        ],
+        [
+          1791334800,
+          102.013
+        ],
+        [
+          1791338400,
+          102.047
+        ],
+        [
+          1791342000,
+          102.028
+        ],
+        [
+          1791345600,
+          102.067
+        ],
+        [
+          1791349200,
+          102.073
+        ],
+        [
+          1791352800,
+          102.075
+        ],
+        [
+          1791356400,
+          102.277
+        ],
+        [
+          1791360000,
+          102.254
+        ],
+        [
+          1791362560,
+          102.249
+        ]
+      ]
+    },
+    {
+      "sym": "CL=F",
+      "label": "Crude",
+      "relasi": "konteks",
+      "last": 89.47,
+      "chg": 1.42,
+      "chgPct": 1.61,
+      "series": [
+        [
+          1791277200,
+          87.62
+        ],
+        [
+          1791280800,
+          87.68
+        ],
+        [
+          1791284400,
+          87.19
+        ],
+        [
+          1791288000,
+          87.14
+        ],
+        [
+          1791291600,
+          87.95
+        ],
+        [
+          1791295200,
+          87.83
+        ],
+        [
+          1791298800,
+          88.82
+        ],
+        [
+          1791302400,
+          89.43
+        ],
+        [
+          1791306000,
+          89.46
+        ],
+        [
+          1791309600,
+          89.61
+        ],
+        [
+          1791313200,
+          89.75
+        ],
+        [
+          1791316800,
+          89.91
+        ],
+        [
+          1791324000,
+          89.79
+        ],
+        [
+          1791327600,
+          89.98
+        ],
+        [
+          1791331200,
+          90.13
+        ],
+        [
+          1791334800,
+          90.4
+        ],
+        [
+          1791338400,
+          90.17
+        ],
+        [
+          1791342000,
+          90.21
+        ],
+        [
+          1791345600,
+          90.03
+        ],
+        [
+          1791349200,
+          90.1
+        ],
+        [
+          1791352800,
+          90.18
+        ],
+        [
+          1791356400,
+          89.64
+        ],
+        [
+          1791360000,
+          89.43
+        ],
+        [
+          1791362554,
+          89.47
+        ]
+      ]
+    },
+    {
+      "sym": "^GSPC",
+      "label": "S&P 500",
+      "relasi": "konteks",
+      "last": 7818.9302,
+      "chg": 44.71,
+      "chgPct": 0.58,
+      "series": [
+        [
+          1790879400,
+          7674.0698
+        ],
+        [
+          1790883000,
+          7668.8198
+        ],
+        [
+          1790947800,
+          7749.5898
+        ],
+        [
+          1790951400,
+          7716.4702
+        ],
+        [
+          1790955000,
+          7718.4702
+        ],
+        [
+          1790958600,
+          7713.9902
+        ],
+        [
+          1790962200,
+          7718.0098
+        ],
+        [
+          1790965800,
+          7721.6401
+        ],
+        [
+          1790969400,
+          7723.4902
+        ],
+        [
+          1791207000,
+          7756.0098
+        ],
+        [
+          1791210600,
+          7757.29
+        ],
+        [
+          1791214200,
+          7764.71
+        ],
+        [
+          1791217800,
+          7772.21
+        ],
+        [
+          1791221400,
+          7780.2798
+        ],
+        [
+          1791225000,
+          7790.1201
+        ],
+        [
+          1791228600,
+          7774.2202
+        ],
+        [
+          1791293400,
+          7817.0698
+        ],
+        [
+          1791297000,
+          7842.1201
+        ],
+        [
+          1791300600,
+          7831.4302
+        ],
+        [
+          1791304200,
+          7825.52
+        ],
+        [
+          1791307800,
+          7825.9102
+        ],
+        [
+          1791311400,
+          7824.8501
+        ],
+        [
+          1791315000,
+          7819.8301
+        ],
+        [
+          1791316800,
+          7818.9302
+        ]
+      ]
+    }
+  ],
+  "events": [
+    {
+      "waktuUTC": "2026-10-07T18:00Z",
+      "waktuWIB": "Thu 08 Oct 01:00 WIB",
+      "items": [
+        {
+          "title": "FOMC Minutes",
+          "actual": null,
+          "forecast": null,
+          "previous": null
+        }
+      ],
+      "jenis": null,
+      "usd": null,
+      "arah": null,
+      "kekuatan": null,
+      "skor": null
+    },
+    {
+      "waktuUTC": "2026-10-08T12:30Z",
+      "waktuWIB": "Thu 08 Oct 19:30 WIB",
+      "items": [
+        {
+          "title": "Initial Jobless Claims",
+          "actual": null,
+          "forecast": 200,
+          "previous": 197
+        }
+      ],
+      "jenis": "BELUM RILIS",
+      "usd": null,
+      "arah": null,
+      "kekuatan": null,
+      "skor": null
+    },
+    {
+      "waktuUTC": "2026-10-09T14:00Z",
+      "waktuWIB": "Fri 09 Oct 21:00 WIB",
+      "items": [
+        {
+          "title": "Michigan Consumer Sentiment Prel",
+          "actual": null,
+          "forecast": 47.6,
+          "previous": 48.1
+        }
+      ],
+      "jenis": null,
+      "usd": null,
+      "arah": null,
+      "kekuatan": null,
+      "skor": null
+    },
+    {
+      "waktuUTC": "2026-10-13T14:00Z",
+      "waktuWIB": "Tue 13 Oct 21:00 WIB",
+      "items": [
+        {
+          "title": "Existing Home Sales",
+          "actual": null,
+          "forecast": null,
+          "previous": 3.98
+        }
+      ],
+      "jenis": null,
+      "usd": null,
+      "arah": null,
+      "kekuatan": null,
+      "skor": null
+    }
+  ],
+  "mode": "intraday",
+  "contoh": "Data contoh dari analisis notulen FOMC 7 Okt 2026. Field 'strategi' dan 'amd' masih ilustrasi bentuk, belum hasil engine.",
+  "strategi": {
+    "regime": {
+      "tren": "trend-turun",
+      "volatilitas": "normal",
+      "sesi": "London",
+      "jendelaNews": false
+    },
+    "terpilih": "ict_sweep",
+    "alasan": "[contoh bentuk] expectancy OOS tertinggi di regime trend-turun",
+    "kandidat": [
+      {
+        "strategy": "ict_sweep",
+        "trades": 0,
+        "winrate": null,
+        "expectancy": null,
+        "sample": "oos"
+      }
+    ]
+  },
+  "amd": {
+    "tanggal": "2026-10-07",
+    "fase": "M",
+    "rangeAsia": {
+      "lo": 4140.0,
+      "hi": 4162.0
+    },
+    "sweep": {
+      "sisi": "atas",
+      "harga": 4166.0,
+      "waktu": "2026-10-07T07:40:00Z"
+    },
+    "catatan": "[contoh bentuk] fase dari amd.fase_sekarang()"
+  },
+  "timeframes": {
+    "bias": [
+      "4h",
+      "1h",
+      "30m"
+    ],
+    "entry": [
+      "15m",
+      "5m"
+    ]
+  },
+  "basis": {
+    "sumber": "XAUT Binance dikoreksi ke spot gold-api",
+    "nilai": -4.99
+  }
+}
