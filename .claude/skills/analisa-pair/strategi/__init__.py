@@ -8,7 +8,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from strategi import amd, ict_sweep, tren_pullback  # noqa: E402
+from strategi import amd, ict_sweep, sniper, tren_pullback  # noqa: E402
 
 REGISTRY = {
     "tren_pullback": tren_pullback,
@@ -16,6 +16,8 @@ REGISTRY = {
     "amd": amd,
     # "alchemist": alchemist,  # menunggu PDF strategi dari user
 }
+# Dinilai terpisah dari pemilih strategi utama: backtest.py --strategi sniper, hasil di data/backtest/sniper/
+EKSTRA = {"sniper": sniper}
 T0 = 1785715200  # Senin 3 Agu 2026 00:00 UTC
 
 

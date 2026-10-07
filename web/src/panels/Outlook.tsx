@@ -2,6 +2,11 @@ import { FIXTURE, type NewsRow } from '../lib/supabase'
 import { dirClass, fmt, wibTime } from '../lib/format'
 import { Impact } from './Analysis'
 
+const BULAN = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
+const bulan = (iso: string) => {
+  const d = new Date(Date.parse(iso) + 7 * 3600e3)
+  return `${BULAN[d.getUTCMonth()]} ${d.getUTCFullYear()}`
+}
 const num = (v: number | null) => (v == null ? '–' : fmt(Number(v), 2).replace(/\.?0+$/, ''))
 
 function Hasil({ h }: { h: Record<string, unknown> }) {
@@ -14,7 +19,7 @@ export function Outlook({ rows, error }: { rows: NewsRow[] | null; error: string
   const body = FIXTURE ? <p className="sub">Outlook muncul setelah Supabase tersambung.</p>
     : error ? <p className="sub">Outlook tidak bisa dimuat ({error}).</p>
     : rows == null ? <div className="state compact"><div className="spin" aria-hidden="true" /><p>Memuat outlook</p></div>
-    : !rows.length ? <p className="sub">Belum ada event terjadwal dalam 45 hari ke depan.</p>
+    : !rows.length ? <p className="sub">Belum ada event high/medium mulai hari ini sampai 45 hari ke depan.</p>
     : (
       <div className="tbl-wrap tall">
         <table>
@@ -22,7 +27,10 @@ export function Outlook({ rows, error }: { rows: NewsRow[] | null; error: string
             <th>Waktu</th><th>Impact</th><th>Event</th><th className="r">F</th><th className="r">P</th><th className="r">A</th><th>Dampak</th><th>Lean / hasil</th>
           </tr></thead>
           <tbody>
-            {rows.map((r) => (
+            {rows.flatMap((r, i) => [
+              ...(i === 0 || bulan(r.event_time) !== bulan(rows[i - 1].event_time)
+                ? [<tr key={`m-${r.id}`} className="month"><th colSpan={8} scope="rowgroup">{bulan(r.event_time)}</th></tr>]
+                : []),
               <tr key={r.id}>
                 <td className="num nw">{wibTime(r.event_time)}</td>
                 <td><Impact v={r.importance === 1 ? 'High' : r.importance === 0 ? 'Medium' : null} /></td>
@@ -43,15 +51,15 @@ export function Outlook({ rows, error }: { rows: NewsRow[] | null; error: string
                     : r.lean?.arah ? <span className={`lean ${dirClass(r.lean.arah)}`} title={r.lean.alasan}>{r.lean.arah}{r.lean.kekuatan ? ` · ${r.lean.kekuatan}` : ''}</span>
                     : <span className="sub">–</span>}
                 </td>
-              </tr>
-            ))}
+              </tr>,
+            ])}
           </tbody>
         </table>
       </div>
     )
   return (
     <section className="card full" aria-labelledby="outTitle">
-      <div className="card-head"><h2 id="outTitle">Outlook news 45 hari</h2><span className="sub">Waktu WIB. F = forecast, P = previous, A = actual</span></div>
+      <div className="card-head"><h2 id="outTitle">Outlook news hari ini dan ke depan</h2><span className="sub">Waktu WIB. F = forecast, P = previous, A = actual</span></div>
       {body}
     </section>
   )

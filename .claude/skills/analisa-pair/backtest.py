@@ -1,7 +1,7 @@
 """Backtest bar-per-bar semua strategi untuk satu mode, walk-forward 40 hari in-sample + 20 hari out-of-sample.
 
-Pakai:  python backtest.py <PAIR> <scalp|intraday|swing> [--source binance|yahoo|oanda]
-  Simulasi di TF trigger mode (5m/5m/15m). Limit terisi kalau harga menyentuh entry dalam 12 candle TF entry,
+Pakai:  python backtest.py <PAIR> <scalp|intraday|swing> [--source binance|yahoo|oanda] [--strategi NAMA]
+  Simulasi di TF trigger mode (5m/5m/15m), atau di TF `SIM` milik strategi (sniper: 1m). Limit terisi kalau harga menyentuh entry dalam 12 candle TF entry,
   batal kalau target tersentuh duluan. SL dan TP di candle yang sama = SL. Candle pengisian hanya dicek SL.
   Biaya 0.30 spread + 0.10 slippage per trade, dikurangkan dalam R. Satu posisi/order per strategi.
   avg_r = rata-rata R kotor, expectancy = rata-rata R bersih biaya, winrate dari R bersih > 0.
@@ -36,7 +36,7 @@ def simulasi(rows, sigs, step, expire, cost=COST):
             continue
         buy = s["side"] == "buy"
         e, sl, tp = s["entry"], s["sl"], s["tp"][0]
-        fill = None
+        fill, worst = None, e
         for k in range(i, min(i + expire, len(t))):
             if (l[k] <= e) if buy else (h[k] >= e):
                 fill = k
@@ -47,6 +47,7 @@ def simulasi(rows, sigs, step, expire, cost=COST):
             bebas = t[k] + step
             continue
         for k in range(fill, len(t)):
+            worst = min(worst, l[k]) if buy else max(worst, h[k])
             if (l[k] <= sl) if buy else (h[k] >= sl):
                 px, hasil = sl, "SL"
                 break
@@ -59,6 +60,7 @@ def simulasi(rows, sigs, step, expire, cost=COST):
         r = (px - e) / risk * (1 if buy else -1)
         out.append({"sinyal": s["time"], "masuk": t[fill], "keluar": t[k], "side": s["side"], "entry": e,
                     "sl": sl, "tp": tp, "exit": px, "hasil": hasil, "r": r, "r_net": r - cost / risk,
+                    "floating": round(min(abs(worst - e), risk), 2),
                     "alasan": s.get("alasan", "")})
         bebas = t[k] + step
     return out
@@ -104,7 +106,9 @@ def run(by_tf, pair, mode, run_id, registry=None):
     for name, mod in (registry or REGISTRY).items():
         for params in GRID.get(name, [mod.PARAMS]):
             sigs = [s for s in mod.signals(by_tf, mode, params) if s["time"] >= is0]
-            tr = simulasi(sim, sigs, step, expire)
+            stf = getattr(mod, "SIM", m["trigger"])  # jendela IS/OOS tetap dari TF trigger
+            exp = getattr(mod, "EXPIRE_S", expire * step) // STEP[stf]
+            tr = simulasi(by_tf[stf], sigs, STEP[stf], exp)
             for x in tr:
                 x.update(strategy=name, regime=reg[tutup(mt, mstep, x["masuk"])],
                          sample="oos" if x["masuk"] >= oos0 else "in")
@@ -159,14 +163,18 @@ def _selftest():
     print("selftest OK")
 
 
-def main(pair, mode, source="binance"):
+def main(pair, mode, source="binance", only=None):
     import data
+    from strategi import EKSTRA, REGISTRY
     pair = pair.upper()
-    by = data.bersih(data.load(pair, TFS, source=source, spot=False))
+    reg = {k: v for k, v in {**REGISTRY, **EKSTRA}.items() if k == only} if only else REGISTRY
+    tfs = TFS + sorted({mod.SIM for mod in reg.values() if hasattr(mod, "SIM")} - set(TFS))
+    by = data.bersih(data.load(pair, tfs, source=source, spot=False))
     run_id = f"{dt.datetime.now(dt.timezone.utc):%Y%m%dT%H%M}-{pair}-{mode}"
-    rows, log = run(by, pair, mode, run_id)
-    os.makedirs(OUT, exist_ok=True)
-    path = os.path.join(OUT, f"{pair}_{mode}_{run_id}.json")
+    rows, log = run(by, pair, mode, run_id, reg)
+    out = os.path.join(OUT, only) if only else OUT  # run satu strategi tidak boleh jadi run terbaru pemilih
+    os.makedirs(out, exist_ok=True)
+    path = os.path.join(out, f"{pair}_{mode}_{run_id}.json")
     with open(path, "w", encoding="utf-8") as f:
         json.dump(rows, f, indent=1)
     with open(path.replace(".json", "_trades.json"), "w", encoding="utf-8") as f:
@@ -177,6 +185,10 @@ def main(pair, mode, source="binance"):
           f"{iso(sim[-1][0] - (IS_DAYS + OOS_DAYS) * 86400)} -> {iso(sim[-1][0])} UTC | oos mulai "
           f"{iso(sim[-1][0] - OOS_DAYS * 86400)}")
     print(tabel(rows))
+    for name in reg:
+        menang = sorted(x["floating"] for x in log if x["strategy"] == name and x["r_net"] > 0)
+        if menang:
+            print(f"{name}: floating trade menang median ${menang[len(menang) // 2]:.2f}, terburuk ${menang[-1]:.2f}")
     print(f"\n{path}")
 
 
@@ -185,5 +197,5 @@ if __name__ == "__main__":
     if args == ["--selftest"]:
         _selftest()
         sys.exit()
-    src = args[args.index("--source") + 1] if "--source" in args else "binance"
-    main(args[0], args[1], src)
+    opt = lambda k, d=None: args[args.index(k) + 1] if k in args else d
+    main(args[0], args[1], opt("--source", "binance"), opt("--strategi"))

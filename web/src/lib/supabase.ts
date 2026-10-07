@@ -107,11 +107,17 @@ export function useAnalyses(pair: string, mode: Mode) {
   )
 }
 
+// 00:00 WIB hari ini dalam ISO UTC.
+const startOfTodayWib = () => {
+  const d = 86400e3, wib = 7 * 3600e3
+  return new Date(Math.floor((Date.now() + wib) / d) * d - wib).toISOString()
+}
+
 export function useNewsOutlook(pair: string) {
   return useRows<NewsRow>(
     `news:${pair}`,
     sb && (() => q(sb.from('news_outlook').select('*').eq('pair', pair)
-      .gte('event_time', new Date(Date.now() - 6 * 3600e3).toISOString())
+      .gte('event_time', startOfTodayWib())
       .order('event_time', { ascending: true }))),
     'news_outlook',
     `pair=eq.${pair}`,

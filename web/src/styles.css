@@ -197,6 +197,7 @@ button, input { font: inherit; color: inherit; }
 .tbl-wrap { overflow-x: auto; }
 .tbl-wrap.tall { max-height: 520px; overflow-y: auto; }
 .tbl-wrap.tall th { position: sticky; top: 0; background: var(--card); }
+.tbl-wrap.tall tr.month th { position: static; color: var(--ink-strong); font-size: 13px; padding-top: 14px; background: var(--raised); }
 table { border-collapse: collapse; width: 100%; font-size: 13px; }
 th { text-align: left; color: var(--muted); font-weight: 600; font-size: 12px; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
 td { padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
