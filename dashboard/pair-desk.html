@@ -115,7 +115,7 @@ button, input { font: inherit; color: inherit; }
 .sw.dash { background: repeating-linear-gradient(90deg, var(--ema200) 0 4px, transparent 4px 7px); }
 .sw.box { height: 10px; width: 14px; border-radius: 2px; }
 
-.rail { display: grid; gap: 16px; }
+.rail, .left { display: grid; gap: 16px; min-width: 0; }
 .setup { border: 1px solid var(--line); border-radius: var(--r-lg); padding: 12px; display: grid; gap: 10px; }
 .setup + .setup { margin-top: 10px; }
 .setup.on { border-color: var(--accent); }
@@ -232,6 +232,7 @@ tr:last-child td { border-bottom: 0; }
     </section>
 
     <div class="main" style="margin-top:16px">
+      <div class="left">
       <section class="card" aria-labelledby="chartTitle">
         <div class="card-head">
           <h2 id="chartTitle">Chart dan zona entry</h2>
@@ -245,7 +246,7 @@ tr:last-child td { border-bottom: 0; }
         <div class="legend" id="legend">
           <span><i class="sw" style="background:var(--ema20)"></i>EMA 20</span>
           <span><i class="sw" style="background:var(--ema50)"></i>EMA 50</span>
-          <span><i class="sw dash"></i>EMA 200</span>
+          <span id="lg200"><i class="sw dash"></i>EMA 200</span>
           <span><i class="sw box" style="background:var(--zone-sell);outline:1px solid var(--down)"></i>Zona sell</span>
           <span><i class="sw box" style="background:var(--zone-buy);outline:1px solid var(--up)"></i>Zona buy</span>
           <span><i class="sw" style="background:var(--accent)"></i>Entry</span>
@@ -253,15 +254,16 @@ tr:last-child td { border-bottom: 0; }
           <span><i class="sw" style="background:var(--up)"></i>Target</span>
         </div>
       </section>
+      <section class="card" aria-labelledby="newsTitle">
+          <div class="card-head"><h2 id="newsTitle">Prediksi news</h2></div>
+          <div id="leans"></div>
+        </section>
+      </div>
 
       <aside class="rail">
         <section class="card" aria-labelledby="setupTitle">
           <div class="card-head"><h2 id="setupTitle">Setup</h2></div>
           <div id="setups"></div>
-        </section>
-        <section class="card" aria-labelledby="newsTitle">
-          <div class="card-head"><h2 id="newsTitle">Prediksi news</h2></div>
-          <div id="leans"></div>
         </section>
       </aside>
     </div>
@@ -345,7 +347,11 @@ tr:last-child td { border-bottom: 0; }
                 ctx.fillRect(0, top, w, 1 * vr);
                 ctx.fillRect(0, top + h - 1 * vr, w, 1 * vr);
                 ctx.font = `${600} ${11 * hr}px ${css("--font-num")}`;
-                ctx.fillText(z.label, 8 * hr, top - 4 * vr);
+                const tw = ctx.measureText(z.label).width;
+                ctx.fillStyle = css("--card");
+                ctx.fillRect(4 * hr, top - 17 * vr, tw + 8 * hr, 15 * vr);
+                ctx.fillStyle = z.side === "sell" ? css("--down") : css("--up");
+                ctx.fillText(z.label, 8 * hr, top - 5 * vr);
               }
             });
           },
@@ -367,7 +373,16 @@ tr:last-child td { border-bottom: 0; }
   function initChart() {
     if (chart || !window.LightweightCharts) return;
     chart = LightweightCharts.createChart($("chart"), { autoSize: true, ...chartTheme() });
-    candleSeries = chart.addCandlestickSeries({ priceLineVisible: false });
+    candleSeries = chart.addCandlestickSeries({
+      priceLineVisible: false,
+      autoscaleInfoProvider: (orig) => {
+        const r = orig();
+        if (!r || !r.priceRange) return r;
+        const ex = extraPrices();
+        if (!ex.length) return r;
+        return { ...r, priceRange: { minValue: Math.min(r.priceRange.minValue, ...ex), maxValue: Math.max(r.priceRange.maxValue, ...ex) } };
+      },
+    });
     const line = (color, style) => chart.addLineSeries({ color, lineWidth: 2, lineStyle: style, priceLineVisible: false, lastValueVisible: true, crosshairMarkerVisible: false });
     ema20 = line(css("--ema20"), 0);
     ema50 = line(css("--ema50"), 0);
@@ -420,6 +435,12 @@ tr:last-child td { border-bottom: 0; }
   }
 
   const offset = () => Number($("offset").value) || 0;
+  function extraPrices() {
+    const doc = state.pairs[state.pair];
+    if (!doc) return [];
+    const s = (doc.setups || [])[state.setupIdx] || {};
+    return [s.entry, s.sl, ...(s.tp || [])].filter((v) => v != null).map((v) => v + offset());
+  }
 
   function drawChart() {
     const doc = state.pairs[state.pair];
@@ -432,7 +453,9 @@ tr:last-child td { border-bottom: 0; }
     candleSeries.setData(bars);
     ema20.setData(ema(bars, 20));
     ema50.setData(ema(bars, 50));
-    ema200.setData(ema(bars, 200));
+    const e200 = ema(bars, 200);
+    ema200.setData(e200);
+    $("lg200").hidden = !e200.length;
     lastBar = bars[bars.length - 1] || null;
     showReadout(lastBar);
     zonePrim.setZones((doc.zones || []).map((z) => ({ ...z, lo: z.lo + off, hi: z.hi + off })));
@@ -453,7 +476,7 @@ tr:last-child td { border-bottom: 0; }
     };
     for (const lv of doc.levels || []) {
       if (lv.kind === "sekarang" || String(lv.kind).startsWith("zona")) continue;
-      add(lv.price, css("--muted"), lv.label, 3, false);
+      add(lv.price, css("--muted"), lv.label, 3, true);
     }
     const s = (doc.setups || [])[state.setupIdx];
     if (s) {
@@ -684,7 +707,7 @@ tr:last-child td { border-bottom: 0; }
   $("setups").addEventListener("click", (e) => {
     const b = e.target.closest("[data-setup]"); if (!b) return;
     state.setupIdx = Number(b.dataset.setup);
-    render(); drawLines();
+    render(); drawLines(); chart && chart.priceScale("right").applyOptions({ autoScale: true });
   });
   $("offset").addEventListener("change", () => {
     if (state.pair) store.set("offset:" + state.pair, $("offset").value);

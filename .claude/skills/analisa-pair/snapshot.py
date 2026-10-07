@@ -115,7 +115,7 @@ def _selftest():
 def main(pair, analysis_path, outdir="."):
     pair = pair.upper()
     analysis = json.load(open(analysis_path, encoding="utf-8"))
-    price_payload = yahoo(PRICE_SYM[pair], "60m", "10d")
+    price_payload = yahoo(PRICE_SYM[pair], "60m", "1mo")
     drv = []
     for sym, _, _ in DRIVERS[pair]:
         try:
