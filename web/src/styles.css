@@ -24,6 +24,8 @@
   --font-num: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --r-sm: 4px; --r-md: 6px; --r-lg: 8px; --r-xl: 12px;
   --tap: 36px;
+  /* latar label harga live: teks putih tetap >= 4.5:1 di kedua tema */
+  --up-label: #0b8457; --down-label: #d12f45;
 }
 @media (prefers-color-scheme: light) {
   :root:not([data-theme="dark"]) {
@@ -127,9 +129,10 @@ button, input { font: inherit; color: inherit; }
 .readout { font-size: 12px; color: var(--muted); display: flex; gap: 12px; flex-wrap: wrap; min-height: 18px; }
 .readout b { color: var(--ink); font-weight: 500; }
 .chart { height: clamp(320px, 52vh, 520px); width: 100%; position: relative; }
-.countdown { position: absolute; right: 0; z-index: 3; pointer-events: none; text-align: center; font-size: 11px; line-height: 16px; color: var(--on-trade); }
-.countdown.up-bg { background: var(--up); }
-.countdown.down-bg { background: var(--down); }
+.last-label { position: absolute; right: 0; z-index: 3; pointer-events: none; display: grid; text-align: center; font-size: 11px; line-height: 15px; padding: 2px 0; color: #ffffff; border-radius: 2px; }
+.last-label b { font-weight: 700; }
+.last-label.up-bg { background: var(--up-label); }
+.last-label.down-bg { background: var(--down-label); }
 .chart-empty { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 8px; color: var(--muted); font-size: 13px; z-index: 2; pointer-events: none; }
 .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--muted); margin-top: 10px; }
 .legend span { display: inline-flex; align-items: center; gap: 6px; }

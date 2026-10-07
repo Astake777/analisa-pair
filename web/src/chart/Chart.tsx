@@ -53,13 +53,14 @@ export default function Chart({ bars, shift, setup, zones, levels, emptyText }: 
   const prev = useRef<{ first?: Bar; len: number; shift: number }>({ len: 0, shift: 0 })
   const [hover, setHover] = useState<Pt | null>(null)
   const [themeRev, setThemeRev] = useState(0)
-  const [cd, setCd] = useState<{ top: number; width: number; text: string; up: boolean } | null>(null)
+  const [cd, setCd] = useState<{ top: number; width: number; text: string; up: boolean; price: number } | null>(null)
   const live = useRef({ bars, shift })
   live.current = { bars, shift }
 
   useEffect(() => {
     const chart = createChart(box.current!, { autoSize: true, ...theme() })
     const candles = chart.addCandlestickSeries({
+      lastValueVisible: false,
       priceLineVisible: true,
       priceLineStyle: LineStyle.Dotted,
       priceLineWidth: 1,
@@ -159,7 +160,8 @@ export default function Chart({ bars, shift, setup, zones, levels, emptyText }: 
     a.chart.priceScale('right').applyOptions({ autoScale: true })
   }, [setup, levels, shift, themeRev, bars.length > 0])
 
-  // Hitung mundur penutupan candle, diletakkan di bawah label harga terakhir pada sumbu kanan.
+  // Label harga terakhir + hitung mundur candle dalam satu kotak di sumbu kanan, supaya tidak pernah terpisah.
+  const tickRef = useRef<() => void>(() => {})
   useEffect(() => {
     const tick = () => {
       const a = api.current
@@ -168,17 +170,19 @@ export default function Chart({ bars, shift, setup, zones, levels, emptyText }: 
       if (!a || !last || bs.length < 2) return setCd(null)
       const tail = bs.slice(-6)
       const step = Math.min(...tail.slice(1).map((x, i) => x.time - tail[i].time))
-      const left = last.time + step - Math.floor(Date.now() / 1000)
+      const left = Math.min(step, Math.max(0, last.time + step - Math.floor(Date.now() / 1000)))
       const y = a.candles.priceToCoordinate(last.close + sh)
-      if (left <= 0 || left > step || y == null) return setCd(null)
+      if (y == null) return setCd(null)
       const h = Math.floor(left / 3600), m = Math.floor((left % 3600) / 60), sec = left % 60
       const text = (h ? `${h}:${String(m).padStart(2, '0')}` : String(m).padStart(2, '0')) + ':' + String(sec).padStart(2, '0')
-      setCd({ top: y + 9, width: a.chart.priceScale('right').width(), text, up: last.close >= last.open })
+      setCd({ top: y - 10, width: a.chart.priceScale('right').width(), text, up: last.close >= last.open, price: last.close + sh })
     }
+    tickRef.current = tick
     tick()
     const id = setInterval(tick, 1000)
     return () => clearInterval(id)
   }, [])
+  useEffect(() => tickRef.current(), [bars, shift])
 
   const lastBar = bars.at(-1)
   const b = hover ?? (lastBar && {
@@ -200,8 +204,9 @@ export default function Chart({ bars, shift, setup, zones, levels, emptyText }: 
       </div>
       <div className="chart" ref={box} role="img" aria-label="Chart candlestick dengan EMA, zona entry, range Asia, entry, stop loss dan target">
         {cd && (
-          <div className={`countdown num ${cd.up ? 'up-bg' : 'down-bg'}`} style={{ top: cd.top, width: cd.width }} aria-label={`Candle tutup dalam ${cd.text}`}>
-            {cd.text}
+          <div className={`last-label num ${cd.up ? 'up-bg' : 'down-bg'}`} style={{ top: cd.top, width: cd.width }} aria-label={`Harga ${fmt(cd.price, 2)}, candle tutup dalam ${cd.text}`}>
+            <b>{fmt(cd.price, 2)}</b>
+            <span>{cd.text}</span>
           </div>
         )}
         {!bars.length && (

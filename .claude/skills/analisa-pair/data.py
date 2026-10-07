@@ -39,7 +39,7 @@ OANDA_SYM = {"XAUUSD": "XAU_USD", "XAGUSD": "XAG_USD"}
 OANDA_HOST = {"practice": "api-fxpractice.oanda.com", "live": "api-fxtrade.oanda.com"}
 OANDA_PAGES = 4  # 4 x 5000 candle saat cache masih kosong
 BINANCE_SYM = {"XAUUSD": "XAUTUSDT"}
-BINANCE_DAYS = {"1m": 75, "5m": 75, "15m": 75, "30m": 75, "1h": 730, "4h": 730, "1d": 1000}  # 60 hari + warm-up
+BINANCE_DAYS = {"1m": 200, "5m": 200, "15m": 200, "30m": 200, "1h": 730, "4h": 730, "1d": 1000}  # 60 hari + warm-up
 SPOT_URL = {"XAUUSD": "https://api.gold-api.com/price/XAU"}
 
 
