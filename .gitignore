@@ -1,0 +1,5 @@
+.claude-flow/
+__pycache__/
+*.pyc
+*.tmp
+.claude/settings.local.json
