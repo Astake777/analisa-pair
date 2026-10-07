@@ -133,13 +133,15 @@ def write_candles(pair, outdir):
     for tf, r in rows.items():
         with open(os.path.join(outdir, f"candles_{tf}.json"), "w", encoding="utf-8") as f:
             json.dump(candle_doc(tf, r), f)
-    return rows["1m"][-1][4], {tf: len(candle_doc(tf, r)["rows"]) for tf, r in rows.items()}
+    basis = getattr(data.load, "basis", None)
+    sumber = f"{data.load.sym} + koreksi spot {basis:+.2f}" if basis is not None else data.load.sym
+    return rows["1m"][-1][4], {tf: len(candle_doc(tf, r)["rows"]) for tf, r in rows.items()}, sumber
 
 
 def main(pair, arg, outdir="."):
     pair = pair.upper()
     os.makedirs(outdir, exist_ok=True)
-    price, counts = write_candles(pair, outdir)
+    price, counts, sumber = write_candles(pair, outdir)
     if arg == "--pantau":
         with open(os.path.join(outdir, "price.json"), "w", encoding="utf-8") as f:
             json.dump({"price": price, "priceAt": now_iso()}, f)
@@ -159,6 +161,7 @@ def main(pair, arg, outdir="."):
         print(f"kalender gagal: {e}", file=sys.stderr)
         events = []
     doc, hist, hid = build(pair, analysis, price, drv, events)
+    doc["priceSymbol"] = sumber
     for name, body in (("doc.json", doc), ("history.json", hist)):
         with open(os.path.join(outdir, name), "w", encoding="utf-8") as f:
             json.dump(body, f, ensure_ascii=False)
