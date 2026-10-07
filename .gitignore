@@ -1,6 +1,11 @@
-.claude-flow/
-__pycache__/
+*.pdf
 *.pyc
 *.tmp
+.claude-flow/
+.claude/.proven-config*
+.claude/proven-config*
 .claude/settings.local.json
 .playwright-mcp/
+.venv-openbb/
+__pycache__/
+data/cache/
