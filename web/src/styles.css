@@ -121,8 +121,8 @@ button, input { font: inherit; color: inherit; }
 
 /* main grid */
 .main { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; align-items: start; }
-/* >=2200px (zoom 80% ke bawah di monitor 1920px): kolom kanan kedua untuk Bot MT5 dan kinerja (App.tsx memindah kartunya) */
-@media (min-width: 2200px) { .main { grid-template-columns: minmax(0, 1fr) 360px 360px; } }
+/* zoom browser <= 85% (useTigaKolom di App.tsx): kolom kanan kedua untuk Bot MT5 dan kinerja */
+.main.tiga { grid-template-columns: minmax(0, 1fr) 360px 360px; }
 .card { background: var(--card); border-radius: var(--r-xl); padding: 16px; min-width: 0; }
 .card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
 .seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--line); border-radius: var(--r-md); overflow: hidden; }

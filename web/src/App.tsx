@@ -19,14 +19,17 @@ const NO_LEVELS: { price: number; label: string; kind: string }[] = []
 const hasNotif = typeof Notification !== 'undefined'
 type Bar = { time: number; open: number; high: number; low: number; close: number }
 
-function useLebar(q: string) {
-  const [cocok, setCocok] = useState(() => matchMedia(q).matches)
+// Tiga kolom hanya saat browser di-zoom out (<= 85%, mis. 80% / 67%) dan layar cukup lebar.
+// Zoom dibaca dari outerWidth (px layar) / innerWidth (px CSS), jadi tidak tergantung ukuran monitor.
+function useTigaKolom() {
+  const cek = () => window.innerWidth >= 1500 && window.outerWidth > 0 && window.outerWidth / window.innerWidth <= 0.85
+  const [tiga, setTiga] = useState(cek)
   useEffect(() => {
-    const m = matchMedia(q), f = () => setCocok(m.matches)
-    m.addEventListener('change', f)
-    return () => m.removeEventListener('change', f)
-  }, [q])
-  return cocok
+    const f = () => setTiga(cek())
+    window.addEventListener('resize', f)
+    return () => window.removeEventListener('resize', f)
+  }, [])
+  return tiga
 }
 
 // Candle M5 broker ±7 hari untuk menilai jalur harga setiap setup; cadangan: candle yang sedang tampil.
@@ -93,7 +96,7 @@ export default function App() {
   }, [])
 
   const feed = useLiveFeed(tf)
-  const lebar = useLebar('(min-width: 2200px)')
+  const lebar = useTigaKolom()
   const an = useAnalyses(PAIR, mode)
   const bt = useBacktest(PAIR, mode)
   const news = useNewsOutlook(PAIR)
@@ -207,7 +210,7 @@ export default function App() {
     store.set('mode', m)
   }
 
-  // >=2200px (zoom 80% ke bawah di monitor 1920px): Bot MT5 dan kartu kinerja di kolom paling kanan; di bawahnya urutan lama satu kolom kanan.
+  // Zoom <= 85%: Bot MT5 dan kartu kinerja di kolom paling kanan; zoom 90-100%: urutan lama di satu kolom kanan.
   const botDst = <Bot status={bot.status} trades={bot.trades} />
   const rekamDst = (
     <>
@@ -293,7 +296,7 @@ export default function App() {
         )}
       </section>
 
-      <div className="main">
+      <div className={`main${lebar ? ' tiga' : ''}`}>
         <div className="left">
           <Menjelang rows={news.rows} now={now} />
           <section className="card" aria-labelledby="chartTitle">
