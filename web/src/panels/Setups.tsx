@@ -70,7 +70,10 @@ export function Setups({ aktif, riwayat, idx, onPick, off, price, log, onBatal }
   return (
     <>
       {!setups.length && (
-        <p className="sub">{riwayat.length ? 'Belum ada setup aktif. Setup sebelumnya ada di kartu Riwayat.' : 'Belum ada setup. Sistem mengabari begitu zona yang memenuhi syarat muncul.'}</p>
+        <div className="state compact">
+          <h2>Belum ada setup aktif</h2>
+          <p>{riwayat.length ? 'Setup sebelumnya ada di kartu Riwayat.' : 'Sistem mengabari begitu zona yang memenuhi syarat muncul.'}</p>
+        </div>
       )}
       {setups.map((s, i) => {
         const shown = i === idx
