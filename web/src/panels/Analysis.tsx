@@ -1,6 +1,8 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { FIXTURE, type Analysis, type BacktestRow, type Payload } from '../lib/supabase'
-import { dirClass, fmt, signed, wibTime } from '../lib/format'
+import { dirClass, fmt, signed, store, waktuPendek, wibTime } from '../lib/format'
+import type { Jejak } from '../lib/nasib'
+import { Riwayat } from './Setups'
 
 export function PrediksiNews({ items }: { items: NonNullable<Payload['prediksiNews']> }) {
   if (!items.length) return <p className="sub">Tidak ada event penting dalam jendela analisis.</p>
@@ -223,23 +225,38 @@ export function Amd({ amd, off, bare = false }: { amd: NonNullable<Payload['amd'
   )
 }
 
-export function RiwayatAnalisis({ rows, off }: { rows: Analysis[] | null; off: number }) {
-  return <Bungkus bare={false} judul="Riwayat analisis" id="histTitle"><DaftarAnalisis rows={rows} off={off} /></Bungkus>
+const PILIH_RIWAYAT = [['setup', 'Setup'], ['analisis', 'Analisis']] as const
+
+// Satu kartu riwayat dengan switch: setup yang sudah selesai/gugur, atau analisis yang pernah dipublikasi.
+export function RiwayatKartu({ setup, analisis, off }: { setup: Jejak[]; analisis: Analysis[] | null; off: number }) {
+  const [v, setV] = useState(() => (store.get('riwayat') === 'analisis' ? 'analisis' : 'setup'))
+  const pilih = (
+    <div className="seg" role="group" aria-label="Jenis riwayat">
+      {PILIH_RIWAYAT.map(([k, t]) => (
+        <button key={k} type="button" aria-pressed={v === k} onClick={() => { setV(k); store.set('riwayat', k) }}>{t}</button>
+      ))}
+    </div>
+  )
+  return (
+    <Bungkus bare={false} judul="Riwayat" id="riwTitle" sisi={pilih}>
+      {v === 'setup' ? <Riwayat rows={setup} off={off} /> : <DaftarAnalisis rows={analisis} off={off} />}
+    </Bungkus>
+  )
 }
 
 function DaftarAnalisis({ rows, off }: { rows: Analysis[] | null; off: number }) {
   if (rows == null) return <p className="sub">Memuat riwayat analisis.</p>
   if (!rows.length) return <p className="sub">Belum ada riwayat untuk pair dan mode ini.</p>
   return (
-    <ul className="log">
+    <ul className="log log2">
       {rows.slice(0, 15).map((h, i) => {
         const s = h.payload.setups?.[0]
         return (
-          <li key={h.id ?? i} title={s ? `SL ${fmt(s.sl + off)} · TP ${s.tp?.map((t) => fmt(t + off)).join(' / ') ?? '–'} · keyakinan ${h.keyakinan ?? '–'}` : `keyakinan ${h.keyakinan ?? '–'}`}>
+          <li key={h.id ?? i}>
             <span className={s?.side === 'sell' ? 'down' : s?.side === 'buy' ? 'up' : 'sub'}>{s ? s.side.toUpperCase() : '–'}</span>
             <span className="num">{s ? fmt(s.entry + off, 2) : '–'}</span>
-            <span className="sub">{wibTime(h.created_at)}</span>
             <span className="sub">{h.status}</span>
+            <span className="sub ket">{waktuPendek(h.created_at)} WIB{s ? ` · SL ${fmt(s.sl + off)} · TP ${s.tp?.map((t) => fmt(t + off)).join(' / ') ?? '–'}` : ''} · keyakinan {h.keyakinan ?? '–'}</span>
           </li>
         )
       })}

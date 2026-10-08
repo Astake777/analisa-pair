@@ -54,7 +54,7 @@ body {
   font: 400 14px/1.5 var(--font-ui);
   padding-inline: 16px; padding-block: 0 48px;
 }
-.wrap { max-width: 1360px; margin-inline: auto; display: grid; gap: 16px; }
+.wrap { max-width: 2800px; margin-inline: auto; display: grid; gap: 16px; }
 .num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
 h1, h2, h3 { margin: 0; font-weight: 700; text-wrap: balance; }
 h2 { font-size: 16px; color: var(--ink-strong); }
@@ -121,6 +121,8 @@ button, input { font: inherit; color: inherit; }
 
 /* main grid */
 .main { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; align-items: start; }
+/* >=2200px (zoom 80% ke bawah di monitor 1920px): kolom kanan kedua untuk Bot MT5 dan kinerja (App.tsx memindah kartunya) */
+@media (min-width: 2200px) { .main { grid-template-columns: minmax(0, 1fr) 360px 360px; } }
 .card { background: var(--card); border-radius: var(--r-xl); padding: 16px; min-width: 0; }
 .card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
 .seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--line); border-radius: var(--r-md); overflow: hidden; }
@@ -326,3 +328,8 @@ tr.det > td { padding: 4px 0 12px; }
 
 
 
+
+/* daftar riwayat 2 baris: arah, harga, status; keterangan kecil di bawahnya supaya tidak patah di rail 360px */
+.log2 li { grid-template-columns: 40px 1fr auto; row-gap: 2px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+.log2 li:last-child { border-bottom: 0; }
+.log2 .ket { grid-column: 2 / -1; font-size: 12px; }

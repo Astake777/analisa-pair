@@ -5,10 +5,10 @@ import { TFS, useLiveFeed, type TF } from './feed'
 import { useLiveDrivers } from './feed/yahoo'
 import { age, fmt, marketOpen, signed, statusKind, store, wibTime } from './lib/format'
 import { FIXTURE, useAnalyses, useBot, useSetupLog, useBacktest, useMacro, useNewsOutlook, type Mode } from './lib/supabase'
-import { Amd, Bias, Bungkus, Calendar, Headlines, Levels, Notes, PrediksiNews, RiwayatAnalisis, Strategi } from './panels/Analysis'
+import { Amd, Bias, Bungkus, Calendar, Headlines, Levels, Notes, PrediksiNews, RiwayatKartu, Strategi } from './panels/Analysis'
 import { ASET, Drivers, Makro } from './panels/Drivers'
 import { Menjelang, Outlook } from './panels/Outlook'
-import { RekamJejak, Riwayat, Setups } from './panels/Setups'
+import { RekamJejak, Setups } from './panels/Setups'
 import { Kinerja } from './panels/Kinerja'
 import { Bot } from './panels/Bot'
 import { nasib, SELESAI, type Jejak } from './lib/nasib'
@@ -18,6 +18,16 @@ const MODES: Mode[] = ['scalp', 'intraday', 'swing']
 const NO_LEVELS: { price: number; label: string; kind: string }[] = []
 const hasNotif = typeof Notification !== 'undefined'
 type Bar = { time: number; open: number; high: number; low: number; close: number }
+
+function useLebar(q: string) {
+  const [cocok, setCocok] = useState(() => matchMedia(q).matches)
+  useEffect(() => {
+    const m = matchMedia(q), f = () => setCocok(m.matches)
+    m.addEventListener('change', f)
+    return () => m.removeEventListener('change', f)
+  }, [q])
+  return cocok
+}
 
 // Candle M5 broker ±7 hari untuk menilai jalur harga setiap setup; cadangan: candle yang sedang tampil.
 function useEvalBars(cadangan: Bar[]) {
@@ -83,6 +93,7 @@ export default function App() {
   }, [])
 
   const feed = useLiveFeed(tf)
+  const lebar = useLebar('(min-width: 2200px)')
   const an = useAnalyses(PAIR, mode)
   const bt = useBacktest(PAIR, mode)
   const news = useNewsOutlook(PAIR)
@@ -196,6 +207,16 @@ export default function App() {
     store.set('mode', m)
   }
 
+  // >=2200px (zoom 80% ke bawah di monitor 1920px): Bot MT5 dan kartu kinerja di kolom paling kanan; di bawahnya urutan lama satu kolom kanan.
+  const botDst = <Bot status={bot.status} trades={bot.trades} />
+  const rekamDst = (
+    <>
+      {lebar && <Kinerja />}
+      <Bungkus bare={false} judul="Rekam jejak live" id="logTitle"><RekamJejak rows={log.rows} error={log.error} /></Bungkus>
+      {!lebar && <Kinerja />}
+      {a?.amd && <Amd amd={a.amd} off={off} />}
+    </>
+  )
   return (
     <div className="wrap">
       <header className="bar">
@@ -344,15 +365,14 @@ export default function App() {
               <Setups aktif={aktif} riwayat={riwayat} idx={idx} onPick={(i) => setPick({ key: akey, idx: i })} off={off} price={feed.last} log={log.rows} />
             )}
           </section>
-          <Bot status={bot.status} trades={bot.trades} />
-          <Bungkus bare={false} judul="Riwayat setup" id="riwTitle"><Riwayat rows={riwayat} off={off} /></Bungkus>
-          <Bungkus bare={false} judul="Rekam jejak live" id="logTitle"><RekamJejak rows={log.rows} error={log.error} /></Bungkus>
-          <Kinerja />
-          {a?.amd && <Amd amd={a.amd} off={off} />}
-          <RiwayatAnalisis rows={an.rows} off={off} />
+          {!lebar && botDst}
+          <RiwayatKartu setup={riwayat} analisis={an.rows} off={off} />
+          {!lebar && rekamDst}
           {a && <Headlines items={a.headlines ?? []} />}
           {a && <Notes notes={a.notes ?? []} />}
         </aside>
+
+        {lebar && <aside className="rail rail2">{botDst}{rekamDst}</aside>}
       </div>
 
       <div className="lower">

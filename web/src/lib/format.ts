@@ -5,6 +5,11 @@ export const fmt = (n: number | null | undefined, d = 1) =>
     ? '–'
     : Number(n).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d })
 
+// "08/10 19:25" (WIB), untuk daftar riwayat yang sempit.
+export function waktuPendek(iso: string | null | undefined) {
+  const w = wibTime(iso)
+  return w === '–' ? w : `${w.slice(8, 10)}/${w.slice(5, 7)} ${w.slice(11, 16)}`
+}
 export const signed = (n: number, d = 1) => `${n > 0 ? '+' : ''}${fmt(n, d)}`
 
 export function wibTime(iso: string | null | undefined, withDate = true) {

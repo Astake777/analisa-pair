@@ -1,6 +1,6 @@
 import type { LogRow, Setup } from '../lib/supabase'
 import type { Jejak, Nasib } from '../lib/nasib'
-import { fmt, wibTime } from '../lib/format'
+import { fmt, waktuPendek, wibTime } from '../lib/format'
 
 // Near = live price within 0.5 x (zone height + $6) of the zone midpoint, i.e. inside or within $3 of an edge.
 const NEAR_PAD = 6
@@ -53,7 +53,7 @@ export function Setups({ aktif, riwayat, idx, onPick, off, price, log }: Props) 
   return (
     <>
       {!setups.length && (
-        <p className="sub">{riwayat.length ? 'Belum ada setup aktif. Setup sebelumnya ada di kartu Riwayat setup.' : 'Belum ada setup. Sistem mengabari begitu zona yang memenuhi syarat muncul.'}</p>
+        <p className="sub">{riwayat.length ? 'Belum ada setup aktif. Setup sebelumnya ada di kartu Riwayat.' : 'Belum ada setup. Sistem mengabari begitu zona yang memenuhi syarat muncul.'}</p>
       )}
       {setups.map((s, i) => {
         const shown = i === idx
@@ -104,21 +104,19 @@ const STATUS: Record<string, [string, string]> = {
 export function Riwayat({ rows, off }: { rows: Jejak[]; off: number }) {
   if (!rows.length) return <p className="sub">Belum ada setup yang selesai atau gugur.</p>
   return (
-    <div>
-      <ul className="log">
-        {rows.map((j) => {
-          const [label, tone] = STATUS[j.n.status] ?? [j.n.status, 'sub']
-          return (
-            <li key={`${j.s.side}${j.s.entry}${j.t0}`} title={j.n.alasan}>
-              <span className={j.s.side === 'sell' ? 'down' : 'up'}>{j.s.side.toUpperCase()}</span>
-              <span className="num">{fmt(j.s.entry + off, 2)}</span>
-              <span className="sub">{wibTime(new Date((j.n.t ?? j.t0) * 1000).toISOString())} · {SUMBER[j.s.label ?? ''] ?? j.s.label ?? 'Setup'}</span>
-              <span className={`num ${tone}`}>{label}</span>
-            </li>
-          )
-        })}
-      </ul>
-    </div>
+    <ul className="log log2">
+      {rows.map((j) => {
+        const [label, tone] = STATUS[j.n.status] ?? [j.n.status, 'sub']
+        return (
+          <li key={`${j.s.side}${j.s.entry}${j.t0}`}>
+            <span className={j.s.side === 'sell' ? 'down' : 'up'}>{j.s.side.toUpperCase()}</span>
+            <span className="num">{fmt(j.s.entry + off, 2)}</span>
+            <span className={`num ${tone}`}>{label}</span>
+            <span className="sub ket">{waktuPendek(new Date((j.n.t ?? j.t0) * 1000).toISOString())} WIB · {SUMBER[j.s.label ?? ''] ?? j.s.label ?? 'Setup'} · {j.n.alasan}</span>
+          </li>
+        )
+      })}
+    </ul>
   )
 }
 
