@@ -240,15 +240,12 @@ export default function App() {
               )}
             </div>
           </section>
-          <div className="duo">
-            {a && (
-              <section className="card" aria-labelledby="newsTitle">
-                <div className="card-head"><h2 id="newsTitle">Prediksi news</h2></div>
-                <PrediksiNews items={a.prediksiNews ?? []} />
-              </section>
-            )}
-            <Kinerja />
-          </div>
+          {a && (
+            <section className="card" aria-labelledby="newsTitle">
+              <div className="card-head"><h2 id="newsTitle">Prediksi news</h2></div>
+              <PrediksiNews items={a.prediksiNews ?? []} />
+            </section>
+          )}
         </div>
 
         <aside className="rail">
@@ -274,6 +271,7 @@ export default function App() {
             )}
           </section>
           <RekamJejak rows={log.rows} error={log.error} />
+          <Kinerja />
           {a?.amd && <Amd amd={a.amd} off={off} />}
         </aside>
       </div>

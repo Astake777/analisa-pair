@@ -1,7 +1,7 @@
 """Kinerja backtest untuk panel website: equity curve dan metrik dari trade OUT-OF-SAMPLE saja.
 
 Asumsi akun: modal MODAL dollar, risiko RISIKO dari ekuitas per trade, majemuk; R bersih biaya.
-Sumber: sniper = trade OOS walk-forward terbaru validasi.py; tren_pullback = sample OOS backtest.py scalp terbaru.
+Sumber: sniper = trade OOS walk-forward terbaru validasi.py; scalp/intraday = sample OOS tren_pullback backtest.py terbaru.
 Pakai:  python kinerja.py            menulis web/public/kinerja.json
 Self-check: python kinerja.py --selftest
 """
@@ -63,13 +63,13 @@ def sniper():
     rep = json.load(open(f.replace("_trades.json", ".json"), encoding="utf-8"))
     tr = json.load(open(f, encoding="utf-8"))
     t0 = min(x["oos_mulai"] for x in rep["lipatan"])
-    return {"nama": "Sniper 1m", "status": "valid" if rep["valid"] else "uji coba",
+    return {"nama": "Sniper", "status": "valid" if rep["valid"] else "uji coba",
             "sumber": "OOS walk-forward validasi.py (parameter dipilih hanya dari data sebelumnya)",
             **metrik(tr, t0, rep["data"][1])}
 
 
-def tren_pullback():
-    f = terbaru(os.path.join(BT, "XAUUSD_scalp_*_trades.json"))
+def tren_pullback(mode):
+    f = terbaru(os.path.join(BT, f"XAUUSD_{mode}_*_trades.json"))
     if not f:
         return None
     tr = [x for x in json.load(open(f, encoding="utf-8")) if x["strategy"] == "tren_pullback" and x["sample"] == "oos"]
@@ -77,7 +77,7 @@ def tren_pullback():
         return None
     from backtest import OOS_DAYS
     t1 = max(x["keluar"] for x in tr)
-    return {"nama": "Tren pullback (scalp)", "status": "strategi utama",
+    return {"nama": mode.capitalize(), "status": f"tren pullback, strategi utama mode {mode}",
             "sumber": f"OOS {OOS_DAYS} hari terakhir backtest.py", **metrik(tr, t1 - OOS_DAYS * 86400, t1)}
 
 
@@ -100,7 +100,7 @@ def main():
     out = {"dibuat": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
            "asumsi": f"Modal ${MODAL:,.0f}, risiko {RISIKO * 100:.0f}% ekuitas per trade, majemuk, biaya spread+slip dihitung. "
                      "Hanya trade out-of-sample.",
-           "strategi": [x for x in (sniper(), tren_pullback()) if x]}
+           "strategi": [x for x in (sniper(), tren_pullback("scalp"), tren_pullback("intraday")) if x]}
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     json.dump(out, open(OUT, "w", encoding="utf-8"))
     for s in out["strategi"]:
