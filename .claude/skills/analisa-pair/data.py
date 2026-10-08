@@ -6,6 +6,7 @@ Pakai:  python data.py <PAIR> [tf ...] [--source auto|binance|oanda|yahoo]
 Baris candle: [t, o, h, l, c, v], t = detik UTC awal candle.
 Cache: E:/Trade Folders/data/cache/<simbol>_<tf>.json. Yahoo hanya memberi 60 hari intraday,
 jadi cache digabung per timestamp supaya riwayat bertambah panjang setiap kali diambil.
+source mt5: candle broker dari terminal MT5 (mt5_link.py, login dari .env), simbol cache MT5_<simbol>.
 source auto: OANDA kalau OANDA_TOKEN dan OANDA_ACCOUNT_ID ada di .env/environment
 (OANDA_ENV = practice | live, simbol cache OANDA_XAU_USD), selain itu Binance XAUTUSDT
 (simbol cache BINANCE_XAUTUSDT) yang digeser ke spot: basis = harga gold-api - close XAUT terakhir.
@@ -41,6 +42,7 @@ OANDA_PAGES = 4  # 4 x 5000 candle saat cache masih kosong
 BINANCE_SYM = {"XAUUSD": "XAUTUSDT"}
 BINANCE_DAYS = {"1m": 200, "5m": 200, "15m": 200, "30m": 200, "1h": 730, "4h": 730, "1d": 1000}  # 60 hari + warm-up
 SPOT_URL = {"XAUUSD": "https://api.gold-api.com/price/XAU"}
+MT5_DAYS = {"1m": 200, "5m": 200, "15m": 200, "30m": 200, "1h": 730, "4h": 730, "1d": 1000}
 
 
 def parse(payload):
@@ -127,6 +129,10 @@ def oanda_creds(e=None):
 def symbol(pair, source="auto", creds=None):
     """Kunci simbol cache: OANDA_<instrumen>, BINANCE_<simbol>, atau simbol Yahoo."""
     pair = pair.upper()
+    if source == "mt5":
+        import mt5_link
+        mt5_link.sambung()
+        return f"MT5_{mt5_link.simbol_emas()}"
     if source == "oanda" or (source == "auto" and creds and pair in OANDA_SYM):
         return f"OANDA_{OANDA_SYM[pair]}"
     if source in ("auto", "binance") and pair in BINANCE_SYM:
@@ -248,7 +254,20 @@ def fetch(sym, tf, refresh=False):
         return old
 
 
+def _fetch_mt5(sym, tf, refresh):
+    """Candle broker MT5 (harga eksekusi sebenarnya); maju dari cache, atau MT5_DAYS ke belakang."""
+    import mt5_link
+    path = _path(sym, tf)
+    old, fresh = _cached(path, tf, refresh)
+    if fresh:
+        return old
+    start = old[-1][0] if old else int(time.time()) - MT5_DAYS[tf] * 86400
+    return _save(path, merge(old, mt5_link.candles(sym.removeprefix("MT5_"), tf, start)))
+
+
 def _ambil(sym, tf, refresh):
+    if sym.startswith("MT5_"):
+        return _fetch_mt5(sym, tf, refresh)
     if sym.startswith("BINANCE_"):
         return _fetch_binance(sym, tf, refresh)
     if sym.startswith("OANDA_"):
