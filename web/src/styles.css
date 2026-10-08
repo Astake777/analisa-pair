@@ -358,3 +358,15 @@ tr.det > td { padding: 4px 0 12px; }
 .form-limit label { align-content: start; }
 .form-limit small { font-size: 12px; color: var(--muted); }
 .form-limit input { width: 100%; min-height: var(--tap); padding: 4px 8px; border-radius: var(--r-md); border: 1px solid var(--line); background: var(--card); color: var(--ink); font-family: var(--font-num); }
+
+/* kartu Posisi & limit aktif */
+.aktif-kepala { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.aktif-grup { display: grid; gap: 6px; }
+.aktif-grup + .aktif-grup { margin-top: 12px; }
+.aktif-grup h3 { margin: 0; font-size: 13px; font-weight: 600; color: var(--muted); }
+.aktif-list { list-style: none; margin: 0; padding: 0; }
+.aktif-list li { display: grid; gap: 2px; padding: 8px 0; border-top: 1px solid var(--line); }
+.aktif-baris { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.aktif-baris .sub { font-size: 12px; }
+.aktif-pl { font-weight: 600; }
+.aktif-list .theme-btn { flex: none; min-height: var(--tap); }

@@ -11,6 +11,7 @@ import { Menjelang, Outlook } from './panels/Outlook'
 import { RekamJejak, Setups } from './panels/Setups'
 import { Kinerja } from './panels/Kinerja'
 import { Bot } from './panels/Bot'
+import { PosisiAktif, useAkunMt5 } from './panels/Posisi'
 import { Mikro } from './panels/Mikro'
 import { kunci, nasib, SELESAI, type Jejak } from './lib/nasib'
 
@@ -233,7 +234,8 @@ export default function App() {
   }
 
   // Zoom <= 85%: Bot MT5 dan kartu kinerja di kolom paling kanan; zoom 90-100%: urutan lama di satu kolom kanan.
-  const botDst = <Bot status={bot.status} trades={bot.trades} setup={setup} off={off} />
+  const mt5 = useAkunMt5()
+  const botDst = <Bot status={bot.status} trades={bot.trades} setup={setup} off={off} mt5={mt5} />
   const rekamDst = (
     <>
       {lebar && <Kinerja />}
@@ -390,6 +392,7 @@ export default function App() {
               <Setups aktif={aktif} riwayat={riwayat} idx={idx} onPick={(i) => setPick({ key: akey, idx: i })} off={off} price={feed.last} log={log.rows} onBatal={muatBatal} perintah={`/analisa-pair ${PAIR} ${mode}`} />
             )}
           </section>
+          <PosisiAktif mt5={mt5} />
           {!lebar && botDst}
           <RiwayatKartu setup={riwayat} analisis={an.rows} off={off} />
           {!lebar && rekamDst}
