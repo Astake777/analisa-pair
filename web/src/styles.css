@@ -342,6 +342,9 @@ tr.det > td { padding: 4px 0 12px; }
 .theme-btn.bahaya { color: var(--down); border-color: var(--down); }
 .theme-btn.bahaya-isi { background: var(--down); border-color: var(--down); color: #fff; font-weight: 600; }
 .yakin p { margin: 0 0 8px; }
+.setup-state.hasil { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.tutup-x { flex: none; min-width: var(--tap); min-height: var(--tap); margin: -8px -8px -8px 0; border: 0; background: none; color: inherit; font-size: 20px; line-height: 1; cursor: pointer; border-radius: var(--r-md); }
+.tutup-x:hover { background: var(--raised); }
 .log .manual { font-style: italic; font-weight: 400; }
 .bot-ctl { display: grid; gap: 10px; border-top: 1px solid var(--line); margin-top: 12px; padding-top: 12px; }
 .bot-ctl h3 { font-size: 14px; color: var(--ink-strong); }

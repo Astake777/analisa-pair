@@ -34,6 +34,13 @@ function KontrolMt5({ setup, off }: { setup?: Setup | null; off: number }) {
     return () => clearInterval(t)
   }, [muat])
 
+  // pesan hasil hilang sendiri setelah 10 detik
+  useEffect(() => {
+    if (!hasil) return
+    const t = setTimeout(() => setHasil(null), 10_000)
+    return () => clearTimeout(t)
+  }, [hasil])
+
   const AKUN = a?.akun.toUpperCase() ?? ''
   const mati = putus || !a || kirim
   const pctRisiko = a ? +(a.risiko * 100).toFixed(2) : '–'
@@ -137,7 +144,12 @@ function KontrolMt5({ setup, off }: { setup?: Setup | null; off: number }) {
           </div>
         </form>
       )}
-      {hasil && <p className={`setup-state ${hasil.ok ? '' : 'off'}`} role={hasil.ok ? 'status' : 'alert'}>{hasil.teks}</p>}
+      {hasil && (
+        <p className={`setup-state hasil ${hasil.ok ? '' : 'off'}`} role={hasil.ok ? 'status' : 'alert'}>
+          <span>{hasil.teks}</span>
+          <button type="button" className="tutup-x" aria-label="Tutup pesan" onClick={() => setHasil(null)}>×</button>
+        </p>
+      )}
     </div>
   )
 }
