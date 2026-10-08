@@ -115,7 +115,7 @@ class Palsu:
     """MT5 tiruan untuk selftest (dipakai juga oleh bot_mt5.py)."""
     TIMEFRAME_M1 = 1
     ORDER_TYPE_BUY_LIMIT, ORDER_TYPE_SELL_LIMIT = 2, 3
-    TRADE_ACTION_PENDING, TRADE_ACTION_REMOVE, TRADE_ACTION_DEAL = 5, 8, 1
+    TRADE_ACTION_PENDING, TRADE_ACTION_REMOVE, TRADE_ACTION_DEAL, TRADE_ACTION_SLTP = 5, 8, 1, 6
     ORDER_TIME_SPECIFIED, ORDER_FILLING_RETURN = 2, 2
     TRADE_RETCODE_DONE, TRADE_RETCODE_PLACED = 10009, 10008
 
@@ -173,6 +173,10 @@ class Palsu:
             return self.N(retcode=self.TRADE_RETCODE_PLACED, order=len(self.kirim), comment="placed")
         if req["action"] == self.TRADE_ACTION_REMOVE:
             self.order = [o for o in self.order if o.ticket != req["order"]]
+        if req["action"] == self.TRADE_ACTION_SLTP:
+            for p in self.posisi:
+                if p.ticket == req["position"]:
+                    p.sl, p.tp = req["sl"], req["tp"]
         return self.N(retcode=self.TRADE_RETCODE_DONE, order=req.get("order", 0), comment="done")
 
     def copy_rates_range(self, nama, tf, a, b):

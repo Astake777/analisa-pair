@@ -1,7 +1,7 @@
 """Backtest BOT: aturan bot_mt5.py dijalankan atas riwayat, dalam dollar, di data broker HFM.
 
 Aturan yang ditiru: modal BOT_MODAL, lot dinamis bot_mt5.lot_untuk (BOT_RISK_PERCENTAGE 25-30% saldo / (SL pips x $10),
-dibulatkan ke bawah 0.01, lewati kalau lot minimum melebihi risiko), maks 1 order/posisi, maks MAKS_SL_HARIAN SL dan MAKS_ENTRY_HARIAN entry per hari WIB,
+dibulatkan ke bawah 0.01, lewati kalau lot minimum melebihi risiko), auto BE di BOT_BE_TRIGGER_PIPS (SL ke entry), maks 1 order/posisi, maks MAKS_SL_HARIAN SL dan MAKS_ENTRY_HARIAN entry per hari WIB,
 tidak ada order dalam NEWS_MENIT dari news USD high impact, limit harus tembus 0.10, batal kalau harga sudah 70%
 ke TP1, kedaluwarsa EXPIRE_S strategi, biaya = spread HFM + slip 0.10.
 Data: candle HFM (MT5); M1 sebelum riwayat M1 HFM diisi XAUT Binance yang digeser ke harga HFM (median selisih
@@ -22,7 +22,7 @@ from bisect import bisect_left
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from backtest import metrik, simulasi  # noqa: E402
-from bot_mt5 import MAKS_ENTRY_HARIAN, MAKS_SL_HARIAN, NEWS_MENIT, hari_wib, konfig, lot_untuk  # noqa: E402
+from bot_mt5 import MAKS_ENTRY_HARIAN, MAKS_SL_HARIAN, NEWS_MENIT, PIP, hari_wib, konfig, lot_untuk  # noqa: E402
 from regime import STEP  # noqa: E402
 from validasi import BATAL_FRAC, TEMBUS  # noqa: E402
 
@@ -86,10 +86,10 @@ def ringkas(diambil, lewati, modal):
         alasan[a] = alasan.get(a, 0) + 1
     return {**m, "earnings": round(eq - modal, 2), "totalReturn": round(eq / modal - 1, 4), "maxDdPersen": round(-dd, 4),
             "lotRata": round(sum(x["lot"] for x in diambil) / len(diambil), 3) if diambil else None,
-            "dilewati": alasan}
+            "be": sum(x["hasil"] == "BE" for x in diambil), "dilewati": alasan}
 
 
-def kandidat(by, nama, mode, cost):
+def kandidat(by, nama, mode, cost, be=None):
     mod = importlib.import_module(f"strategi.{nama}")
     p = dict(mod.PARAMS)
     if p.get("delta"):
@@ -103,7 +103,8 @@ def kandidat(by, nama, mode, cost):
     t = [r[0] for r in by[stf]]
     for s in sig:  # tiap sinyal disimulasikan sendiri; antrean posisi diatur jalankan()
         i = bisect_left(t, s["time"])
-        hasil = simulasi(by[stf][i:], [s], STEP[stf], exp_s // STEP[stf], cost=cost, tembus=TEMBUS, batal_frac=BATAL_FRAC)
+        hasil = simulasi(by[stf][i:], [s], STEP[stf], exp_s // STEP[stf], cost=cost, tembus=TEMBUS, batal_frac=BATAL_FRAC,
+                          be=be)
         tr += [{**x, "strategi": nama} for x in hasil]
     return sig, tr
 
@@ -132,13 +133,13 @@ def main(nama_list):
         news = []
     f = lambda t: dt.datetime.fromtimestamp(t, dt.timezone.utc).strftime("%d %b %Y")
     print(f"data HFM {f(by['1m'][0][0])} - {f(by['1m'][-1][0])}; {n_xaut} candle M1 awal dari XAUT digeser {geser:+.2f}; "
-          f"biaya {cost:.2f}/trade; modal ${modal:,.0f}; risiko {cfg['risiko'] * 100:.0f}%/trade; {len(news)} news high impact")
+          f"biaya {cost:.2f}/trade; modal ${modal:,.0f}; risiko {cfg['risiko'] * 100:.0f}%/trade; auto BE {cfg['be_pips']:g} pips; {len(news)} news high impact")
     import pantau
     semua = nama_list or list(dict.fromkeys(list(REGISTRY) + list(EKSTRA) + pantau.STRATEGI))
     hasil, gabung = {}, []
     for nama in semua:
         mode = "scalp"
-        sig, tr = kandidat(by, nama, mode, cost)
+        sig, tr = kandidat(by, nama, mode, cost, cfg["be_pips"] * PIP or None)
         diambil, lewati = jalankan(tr, modal, cfg["risiko"], news, cost)
         hasil[nama] = {"sinyal": len(sig), **ringkas(diambil, lewati, modal),
                        "kurva": [[x["keluar"], x["ekuitas"]] for x in diambil]}
@@ -146,14 +147,14 @@ def main(nama_list):
         m = hasil[nama]
         print(f"{nama:<17} {m['sinyal']:>4} sinyal {m['trades']:>4} trade  menang {round((m['winrate'] or 0) * 100):>3}%  "
               f"{m['expectancy'] if m['expectancy'] is not None else '-':>6}R  ${m['earnings']:>9,.2f} ({m['totalReturn'] * 100:+.1f}%)  "
-              f"DD {m['maxDdPersen'] * 100:.1f}%  lewati {m['dilewati']}")
+              f"DD {m['maxDdPersen'] * 100:.1f}%  BE {m['be']}  lewati {m['dilewati']}")
     diambil, lewati = jalankan(gabung, modal, cfg["risiko"], news, cost)
     hasil["gabungan"] = {"sinyal": len(gabung), **ringkas(diambil, lewati, modal),
                          "kurva": [[x["keluar"], x["ekuitas"]] for x in diambil]}
     m = hasil["gabungan"]
     print(f"{'GABUNGAN semua':<17} {m['trades']:>4} trade  menang {round((m['winrate'] or 0) * 100)}%  ${m['earnings']:,.2f} "
           f"({m['totalReturn'] * 100:+.1f}%)  DD {m['maxDdPersen'] * 100:.1f}%")
-    rep = {"dibuat": dt.datetime.now(dt.timezone.utc).isoformat(), "modal": modal, "risiko": cfg["risiko"], "biaya": cost,
+    rep = {"dibuat": dt.datetime.now(dt.timezone.utc).isoformat(), "modal": modal, "risiko": cfg["risiko"], "bePips": cfg["be_pips"], "biaya": cost,
            "geserXaut": geser, "nXaut": n_xaut, "dari": by["1m"][0][0], "sampai": by["1m"][-1][0], "hasil": hasil}
     path = os.path.join(OUT, f"bot_{dt.datetime.now(dt.timezone.utc):%Y%m%dT%H%M}.json")
     json.dump(rep, open(path, "w", encoding="utf-8"))

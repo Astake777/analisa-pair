@@ -96,7 +96,7 @@ Untuk analisis berkala: `/loop 30m /analisa-pair XAUUSD intraday`. Harga di webs
 ### Bot MT5 (eksekusi otomatis)
 - `python .claude/skills/analisa-pair/mt5_link.py` cek koneksi; `bot_mt5.py --status` (akun, risiko, syarat live), `--uji-order` (demo saja), `--stop` (kill switch), tanpa argumen = loop. Jalankan loop lewat `Monitor` dan teruskan baris `BOT ORDER/TERISI/TP/SL/DITUTUP/STOP/ERROR` ke HP dengan `PushNotification`.
 - Akun real hanya kalau `BOT_MODE=live`, strategi lulus `validasi.py <strategi> --sumber mt5`, dan syarat real test demo lulus. Jangan pernah mengubah `BOT_MODE`, `BOT_RISK_PERCENTAGE`, atau kredensial MT5 atas inisiatif sendiri; itu keputusan user. Jangan hapus `data/BOT_STOP` kecuali user minta.
-- Lot dinamis: `Risk_Amount = saldo akun × BOT_RISK_PERCENTAGE / 100` (dikunci 25–30%, bawaan 25), `Lot = Risk_Amount / (SL pips × $10)`, dibulatkan ke bawah 0.01. SL lebar → lot kecil, rugi di SL tetap = Risk_Amount. Sebutkan drawdown di risiko itu (panel Hasil backtest memakai angka yang sama).
+- Lot dinamis: `Risk_Amount = saldo akun × BOT_RISK_PERCENTAGE / 100` (dikunci 25–30%, bawaan 25), `Lot = Risk_Amount / (SL pips × $10)`, dibulatkan ke bawah 0.01. SL lebar → lot kecil, rugi di SL tetap = Risk_Amount. Auto break-even: floating profit ≥ `BOT_BE_TRIGGER_PIPS` (bawaan 50) → SL posisi digeser ke entry; tutup di entry = status `BE`. Sebutkan drawdown di risiko itu (panel Hasil backtest memakai angka yang sama).
 - Backtest bot (aturan bot persis, dalam dollar, data HFM): `python backtest_bot.py [strategi ...]`, lalu `python kinerja.py` (tab "Bot HFM"). 8 Okt: hanya sniper untung (+81%, DD −34,5% di risiko 10%); strategi lain rugi.
 
 ### Validasi sebelum mengabarkan setup

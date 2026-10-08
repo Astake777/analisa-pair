@@ -26,9 +26,10 @@ IS_DAYS, OOS_DAYS = 40, 20
 GRID = {}          # nama strategi -> [params, ...] untuk sweep nanti; kosong = PARAMS bawaan
 
 
-def simulasi(rows, sigs, step, expire, cost=COST, tembus=0.0, batal_frac=1.0):
+def simulasi(rows, sigs, step, expire, cost=COST, tembus=0.0, batal_frac=1.0, be=None):
     """-> list trade. rows = candle TF simulasi, expire dalam candle TF simulasi.
-    Order batal kalau sebelum terisi harga sudah menempuh batal_frac x jarak entry->TP (1.0 = TP tersentuh)."""
+    Order batal kalau sebelum terisi harga sudah menempuh batal_frac x jarak entry->TP (1.0 = TP tersentuh).
+    be: profit (harga) yang memindah SL ke entry mulai candle berikutnya; kena -> hasil "BE", r = 0."""
     t, o, h, l, c = kolom(rows)
     out, bebas = [], 0
     for s in sorted(sigs, key=lambda s: s["time"]):
@@ -48,14 +49,17 @@ def simulasi(rows, sigs, step, expire, cost=COST, tembus=0.0, batal_frac=1.0):
         if fill is None:
             bebas = t[k] + step
             continue
+        sl_now = sl
         for k in range(fill, len(t)):
             worst = min(worst, l[k]) if buy else max(worst, h[k])
-            if (l[k] <= sl) if buy else (h[k] >= sl):
-                px, hasil = sl, "SL"
+            if (l[k] <= sl_now) if buy else (h[k] >= sl_now):
+                px, hasil = sl_now, "SL" if sl_now == sl else "BE"
                 break
             if k > fill and ((h[k] >= tp) if buy else (l[k] <= tp)):
                 px, hasil = tp, "TP"
                 break
+            if be and ((h[k] >= e + be) if buy else (l[k] <= e - be)):
+                sl_now = e
         else:
             px, hasil = c[-1], "akhir data"
         risk = abs(e - sl)
@@ -162,6 +166,15 @@ def _selftest():
     rr = ringkas(tr, {"strategy": "x"})
     assert [(r["sample"], r["regime"], r["trades"]) for r in rr] == \
         [("in", "semua", 1), ("in", "range", 1), ("oos", "semua", 1), ("oos", "trend-naik", 1)], rr
+    # auto BE di +5 (50 pips): naik ke 103 lalu balik ke entry -> BE r 0; tanpa be -> SL
+    bb = [[0, 100, 100, 97.5, 98, 0], [60, 98, 103, 98.5, 102, 0], [120, 102, 102, 95, 96, 0]]
+    s_be = {"time": 0, "side": "buy", "entry": 98, "sl": 96, "tp": [104]}
+    x = simulasi(bb, [s_be], 60, 5, cost=0, be=5)[0]
+    assert x["hasil"] == "BE" and x["r"] == 0 and x["exit"] == 98, x
+    assert simulasi(bb, [s_be], 60, 5, cost=0)[0]["hasil"] == "SL"
+    ss = [[0, 100, 102.5, 100, 102, 0], [60, 102, 102, 97, 98, 0], [120, 98, 104.5, 97, 104, 0]]
+    s_sell = {"time": 0, "side": "sell", "entry": 102, "sl": 104, "tp": [96]}
+    assert simulasi(ss, [s_sell], 60, 5, cost=0, be=4)[0]["hasil"] == "BE"     # sell: turun 4, balik ke entry
     print("selftest OK")
 
 

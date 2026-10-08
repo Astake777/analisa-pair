@@ -9,6 +9,8 @@ Pakai:  python bot_mt5.py              loop (Claude menjalankannya lewat Monitor
         BOT_RISK_PERCENTAGE=25 (persen saldo per trade, dikunci 25-30), opsional MT5_SYMBOL, MT5_PATH.
 Lot dinamis: Risk_Amount = saldo akun x Risk_Percentage / 100; Lot = Risk_Amount / (SL_pips x Pip_Value),
 dibulatkan ke bawah ke step broker. SL lebar -> lot kecil, rugi di SL tetap = Risk_Amount.
+Auto break-even: BOT_BE_TRIGGER_PIPS=50 (0 = mati). Floating profit >= itu -> SL posisi digeser ke harga entry
+(dicek tiap putaran 1 menit); kalau harga balik, posisi tutup di entry dengan status BE.
 Pengaman (dicek sebelum setiap order):
   - akun real ditolak kecuali BOT_MODE=live DAN strategi lulus validasi DAN syarat real test demo lulus;
   - berhenti order baru setelah MAKS_SL_HARIAN SL atau MAKS_ENTRY_HARIAN entry dalam satu hari WIB;
@@ -16,7 +18,7 @@ Pengaman (dicek sebelum setiap order):
   - spread > SPREAD_X x median spread -> tunda; file data/BOT_STOP -> batalkan semua dan berhenti.
 Order: limit di entry, SL dan TP1 terpasang, kedaluwarsa = EXPIRE_S strategi; dibatalkan bot kalau harga sudah
 BATAL_FRAC (70%) ke TP1 tanpa terisi (aturan sama dengan backtest dan watcher).
-Baris keluaran (event Monitor): BOT ORDER / TERISI / TP / SL / DITUTUP / BATAL / LEWATI / STOP / ERROR / PULIH.
+Baris keluaran (event Monitor): BOT ORDER / TERISI / BE / TP / SL / DITUTUP / BATAL / LEWATI / STOP / ERROR / PULIH.
 Self-check: python bot_mt5.py --selftest
 """
 import datetime as dt
@@ -45,6 +47,7 @@ NEWS_MENIT, SPREAD_X = 15, 3.0
 SYARAT_LIVE = {"trade": 30, "expectancy": 0.15, "dd": 0.60, "beda_winrate": 0.15, "slip": 0.30}
 WIB = 7 * 3600
 r2 = lambda x: round(x, 2)
+PRIVAT = ("risiko_usd", "ekuitas_awal", "be", "sl_awal")   # hanya di state, tidak ada kolomnya di Supabase
 
 
 def konfig(e):
@@ -53,7 +56,19 @@ def konfig(e):
         risiko = float(e.get("BOT_RISK_PERCENTAGE", "25")) / 100
     except ValueError:
         risiko = RISIKO_MIN
-    return {"mode": "live" if mode == "live" else "demo", "risiko": min(max(risiko, RISIKO_MIN), RISIKO_MAKS)}
+    try:
+        be = max(float(e.get("BOT_BE_TRIGGER_PIPS", "50")), 0.0)
+    except ValueError:
+        be = 50.0
+    return {"mode": "live" if mode == "live" else "demo", "risiko": min(max(risiko, RISIKO_MIN), RISIKO_MAKS),
+            "be_pips": be}
+
+
+def perlu_be(side, buka, sl, bid, ask, be_pips):
+    """Auto break-even: floating profit >= be_pips dan SL belum di entry. -> (geser?, profit pips)"""
+    pips = ((bid - buka) if side == "buy" else (buka - ask)) / PIP
+    belum = (sl or 0) < buka if side == "buy" else (not sl or sl > buka)
+    return bool(be_pips) and pips >= be_pips and belum, round(pips, 1)
 
 
 def hari_wib(t):
@@ -109,7 +124,7 @@ def req_limit(mt5, nama, s, lot, expire_s):
 def syarat_live(jurnal, winrate_bt):
     """Checklist real test dari trade demo yang sudah selesai (TP/SL/DITUTUP)."""
     sel = [x for x in jurnal if x["akun"] == "demo" and x.get("r") is not None
-           and (x["status"] in ("TP", "SL") or str(x["status"]).startswith("DITUTUP"))]
+           and (x["status"] in ("TP", "SL", "BE") or str(x["status"]).startswith("DITUTUP"))]
     n = len(sel)
     rs = [x["r"] for x in sel]
     eq = puncak = 1.0
@@ -149,7 +164,7 @@ class Bot:
             "dibuka": None, "ditutup": None, "status": "PENDING", "pl": None, "r": None, "risiko_usd": None})
         j.update(kw)
         j["updated_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
-        self.ubah.append({k: v for k, v in j.items() if k not in ("risiko_usd", "ekuitas_awal")})
+        self.ubah.append({k: v for k, v in j.items() if k not in PRIVAT})
         return j
 
     def _harian(self, now):
@@ -177,6 +192,15 @@ class Bot:
                                  "price": tick.bid if beli else tick.ask, "deviation": 30, "magic": MAGIC,
                                  "comment": alasan[:31], "type_filling": self.mt5.ORDER_FILLING_RETURN})
         self.cetak(f"BOT DITUTUP posisi {p.ticket}: {alasan} ({getattr(r, 'comment', '')})")
+
+    def geser_be(self, j, p, pips):
+        r = self.mt5.order_send({"action": self.mt5.TRADE_ACTION_SLTP, "symbol": p.symbol, "position": p.ticket,
+                                 "sl": p.price_open, "tp": p.tp, "magic": MAGIC})
+        if r is None or r.retcode != self.mt5.TRADE_RETCODE_DONE:
+            self.cetak(f"BOT ERROR BE posisi {p.ticket}: {getattr(r, 'comment', self.mt5.last_error())}")
+            return
+        self._baris(j, sl=p.price_open, sl_awal=j.get("sl_awal", j["sl"]), be=True)
+        self.cetak(f"BOT BE {j['side'].upper()} {j['entry']}: SL digeser ke entry {p.price_open} (profit {pips:+.1f} pips)")
 
     def stop(self):
         milik = {j.get("order_ticket"): j for j in self.st["jurnal"].values()}
@@ -219,7 +243,14 @@ class Bot:
                     continue
                 j.update(posisi_ticket=j["order_ticket"], status="TERBUKA")
                 h["entry"] += 1   # terisi dan sudah tutup di antara dua putaran
-            if j["status"] == "TERBUKA" and j["posisi_ticket"] not in {p.ticket for p in posisi.values()}:
+            hidup = {p.ticket: p for p in posisi.values()}
+            if j["status"] == "TERBUKA" and j["posisi_ticket"] in hidup:
+                p = hidup[j["posisi_ticket"]]
+                geser, pips = perlu_be(j["side"], p.price_open, p.sl, tick.bid, tick.ask, self.cfg["be_pips"])
+                if geser:
+                    self.geser_be(j, p, pips)
+                continue
+            if j["status"] == "TERBUKA":
                 deals = self.mt5.history_deals_get(position=j["posisi_ticket"]) or []
                 if not deals:
                     continue
@@ -230,10 +261,13 @@ class Bot:
                 if isi and j["harga_isi"] is None:
                     j["harga_isi"] = isi[0].price
                 hasil = "TP" if harga is not None and abs(harga - j["tp"]) <= abs(harga - j["sl"]) else "SL"
+                if hasil == "SL" and j.get("be"):
+                    hasil = "BE"
                 if harga is not None and min(abs(harga - j["tp"]), abs(harga - j["sl"])) > 1.0:
                     hasil = "DITUTUP: manual atau kill switch"
-                risiko_usd = j.get("risiko_usd") or lot_untuk(self.mt5.symbol_info(self.nama), j["entry"], j["sl"], 0, 0)[1][
-                    "pip_value"] * abs(j["entry"] - j["sl"]) / PIP * (j["lot"] or 0)
+                sl0 = j.get("sl_awal", j["sl"])
+                risiko_usd = j.get("risiko_usd") or lot_untuk(self.mt5.symbol_info(self.nama), j["entry"], sl0, 0, 0)[1][
+                    "pip_value"] * abs(j["entry"] - sl0) / PIP * (j["lot"] or 0)
                 r = round(pl / risiko_usd, 2) if risiko_usd else None
                 self._baris(j, status=hasil, pl=r2(pl), r=r, ditutup=dt.datetime.fromtimestamp(
                     keluar[-1].time if keluar else now, dt.timezone.utc).isoformat())
@@ -423,7 +457,7 @@ def main(args):
               f"{'' if ukur is None else f', terukur GMT+{ukur}'}{'' if cocok else '  <-- TIDAK COCOK, cek offset_server'}")
         print(f"akun {mt5_link.JENIS.get(akun.trade_mode)} {akun.server}, saldo {akun.balance} {akun.currency}, "
               f"ekuitas {akun.equity}, mode bot {cfg['mode']}, risiko {cfg['risiko'] * 100:.0f}% saldo = "
-              f"{akun.balance * cfg['risiko']:,.2f} {akun.currency}/trade, simbol {nama} spread {s.spread}, "
+              f"{akun.balance * cfg['risiko']:,.2f} {akun.currency}/trade, auto BE {format(cfg['be_pips'], 'g') + ' pips' if cfg['be_pips'] else 'mati'}, simbol {nama} spread {s.spread}, "
               f"algo trading {'ON' if mt5.terminal_info().trade_allowed else 'OFF'}")
         for k, v in cek.items():
             print(f"  [{'LULUS' if v else 'BELUM'}] {k}")
@@ -445,7 +479,8 @@ def main(args):
     if os.path.exists(STOP_FILE):
         sys.exit(f"Kill switch aktif ({STOP_FILE}). Hapus file itu untuk menjalankan bot lagi.")
     print(f"BOT MULAI akun {mt5_link.JENIS.get(akun.trade_mode)} {akun.server}, simbol {nama}, risiko {cfg['risiko'] * 100:.0f}% "
-          f"saldo = {akun.balance * cfg['risiko']:,.2f} {akun.currency}/trade (lot dinamis dari lebar SL)", flush=True)
+          f"saldo = {akun.balance * cfg['risiko']:,.2f} {akun.currency}/trade (lot dinamis dari lebar SL), "
+          f"{'auto BE di +' + format(cfg['be_pips'], 'g') + ' pips' if cfg['be_pips'] else 'auto BE mati'}", flush=True)
     gagal, news, news_t = None, [], 0
     while True:
         now = int(time.time())
@@ -531,6 +566,35 @@ def _selftest():
     b3.news = [now + 600]
     assert not b3.boleh_order(now, 20, 20)[0] and b3.boleh_order(now + 3600, 20, 20)[0]
     assert not b3.boleh_order(now + 3600, 100, 20)[0]                                   # spread melebar
+    # skenario user: $100, 25%, BUY SL 50 pips -> 0.05 lot; +49 pips belum BE, +50 pips SL ke entry; balik -> BE
+    assert konfig({})["be_pips"] == 50 and konfig({"BOT_BE_TRIGGER_PIPS": "0"})["be_pips"] == 0
+    assert perlu_be("sell", 4100.0, 4105.0, 4094.8, 4095.0, 50) == (True, 50.0)
+    assert not perlu_be("sell", 4100.0, 4100.0, 4094.8, 4095.0, 50)[0] and not perlu_be("buy", 4100, 4095, 4105, 4105.2, 0)[0]
+    m4, k4 = P(), []
+    m4.akun.balance = 100.0
+    st4 = {"jurnal": {}, "lewati": [], "harian": {}}
+    b4 = Bot(m4, konfig({}), st4, cetak=k4.append)
+    b4.nama = "XAUUSD"
+    s4 = {"id": "sniper:2000-buy-4100.0", "strategi": "sniper", "time": 2000, "side": "buy", "entry": 4100.0,
+          "sl": 4095.0, "tp": [4112.0]}
+    m4.symbol_info_tick = lambda n: N(bid=4102.0, ask=4102.2)
+    b4.putaran(2000, [(dict(s4), 3600, info)], [], 20, 0.5)
+    j4 = st4["jurnal"][s4["id"]]
+    assert j4["lot"] == 0.05 and "rugi di SL 25.00" in k4[-1], k4
+    m4.order = []
+    m4.posisi = [N(ticket=j4["order_ticket"], identifier=j4["order_ticket"], magic=MAGIC, price_open=4100.0, sl=4095.0,
+                   tp=4112.0, symbol="XAUUSD", type=0, volume=0.05, time=2100)]
+    for bid in (4104.9, 4104.9, 4105.0, 4105.0):
+        m4.symbol_info_tick = lambda n, b=bid: N(bid=b, ask=b + 0.2)
+        b4.putaran(2200, [], [], 20, 0.5)
+    sltp = [x for x in m4.kirim if x["action"] == m4.TRADE_ACTION_SLTP]
+    assert len(sltp) == 1 and sltp[0]["sl"] == 4100.0 and sltp[0]["tp"] == 4112.0, m4.kirim
+    assert j4["be"] and j4["sl"] == 4100.0 and j4["sl_awal"] == 4095.0 and any(x.startswith("BOT BE BUY") for x in k4)
+    assert "be" not in b4.ubah[-1] if b4.ubah else True
+    m4.posisi = []
+    m4.deal = [N(entry=0, price=4100.0, profit=0.0, time=2100), N(entry=1, price=4100.0, profit=0.0, time=2400)]
+    b4.putaran(2400, [], [], 20, 0.5)
+    assert j4["status"] == "BE" and j4["r"] == 0 and st4["harian"]["sl"] == 0, j4
     # syarat live
     j = [{"akun": "demo", "status": "TP" if i % 2 else "SL", "r": 3.0 if i % 2 else -1.0, "risiko": 0.02,
           "harga_isi": 1.0, "entry": 1.1} for i in range(30)]
