@@ -235,6 +235,20 @@ def geser(by_tf, b):
 
 
 def fetch(sym, tf, refresh=False):
+    """Candle dari cache + sumber. Jaringan gagal tanpa refresh paksa -> cache lama dipakai dengan peringatan;
+    dengan refresh=True (watcher live) error diteruskan supaya gangguan terlihat."""
+    try:
+        return _ambil(sym, tf, refresh)
+    except (OSError, ValueError) as e:
+        old = _cached(_path(sym, tf), tf, False)[0]
+        if refresh or not old:
+            raise
+        print(f"peringatan: {sym} {tf} gagal diperbarui ({e}); memakai cache sampai "
+              f"{dt.datetime.fromtimestamp(old[-1][0], dt.timezone.utc):%Y-%m-%d %H:%M} UTC", file=sys.stderr)
+        return old
+
+
+def _ambil(sym, tf, refresh):
     if sym.startswith("BINANCE_"):
         return _fetch_binance(sym, tf, refresh)
     if sym.startswith("OANDA_"):
