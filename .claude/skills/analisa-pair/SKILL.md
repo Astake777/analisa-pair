@@ -86,6 +86,13 @@ Website lokal: `cd web && npm run dev` lalu buka http://localhost:5180 (harga li
 
 Untuk analisis berkala: `/loop 30m /analisa-pair XAUUSD intraday`. Harga di website sudah live sendiri, jadi `/loop` hanya untuk memperbarui analisis.
 
+### Modul pendukung analisis
+- Orderflow: `python .claude/skills/analisa-pair/orderflow.py` → delta 1 jam, CVD hari ini, AVWAP (hari, minggu, London, NY, swing 1H), volume profile kemarin dan hari ini (POC/VAH/VAL). Volume dari Binance XAUT (proksi, bukan COMEX); sebutkan itu kalau mengutipnya.
+- Skenario news: `python .claude/skills/analisa-pair/skenario_news.py XAUUSD [--jam 48]` → 3 skenario panas/sesuai/dingin, peluang Polymarket, gerak median historis; `publish.py skenario XAUUSD` (butuh migrasi `20261008010000_skenario.sql`). Event tanpa ambang di news.SPEC dilewati, jangan mengarang ambang.
+- Filter kondisi pasar: `python filter_kondisi.py <strategi> <mode>`; hanya dipakai live kalau memperbaiki OOS (8 Okt: tidak ada yang lolos).
+- Panel Hasil backtest: setelah `validasi.py`/`backtest.py`, jalankan `python kinerja.py` (menulis `web/public/kinerja.json`, hanya trade OOS).
+- Kalau watcher melaporkan error SSL/DNS ke Binance: jaringan memblokir exchange crypto (biasa terjadi di data seluler). Minta user pindah ke WiFi atau menyalakan VPN/WARP; jangan menebak harga dari sumber lain.
+
 ### Validasi sebelum mengabarkan setup
 - `python .claude/skills/analisa-pair/validasi.py <strategi>`: walk-forward 90 hari IS / 30 hari OOS di data 200 hari, fill harus tembus $0.10, order batal kalau harga sudah 70% ke TP1 tanpa entry, biaya 2x, parameter tetangga. Label **SETUP VALID** hanya kalau semua syarat `KRITERIA` lulus.
 - Hasil 8 Okt 2026: `sniper` (POI 15m + level MSNR fresh + sweep/CHoCH 1m) OOS 18 trade, menang 44%, +0.79R, lolos 6/7 (kurang jumlah trade) → dikabarkan sebagai uji coba. `alchemist_crt` OOS −0.41R dan `alchemist_london` hampir tidak pernah terisi → **tidak dikabarkan**. Jalankan ulang validasi tiap minggu atau setelah aturan strategi berubah.
