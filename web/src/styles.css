@@ -204,6 +204,9 @@ button, input { font: inherit; color: inherit; }
 .lower { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; align-items: start; }
 .span2 { grid-column: span 2; }
 .full { grid-column: 1 / -1; }
+/* bacaan analisis di bawah chart: Bias + Prediksi news bertumpuk di samping Level kunci yang panjang */
+.duo { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+.stack { display: grid; gap: 16px; min-width: 0; }
 .tbl-wrap { overflow-x: auto; }
 .tbl-wrap.tall { max-height: 520px; overflow-y: auto; }
 .tbl-wrap.tall th { position: sticky; top: 0; background: var(--card); }
@@ -251,6 +254,7 @@ tr:last-child td { border-bottom: 0; }
   .span2 { grid-column: span 2; }
 }
 @media (max-width: 640px) {
+  .duo { grid-template-columns: minmax(0, 1fr); }
   .hero { grid-template-columns: minmax(0, 1fr); }
   .status-block { justify-items: start; text-align: left; }
   .lower { grid-template-columns: minmax(0, 1fr); }

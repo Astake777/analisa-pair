@@ -85,7 +85,7 @@ export function Impact({ v }: { v?: string | null }) {
 
 export function Calendar({ events }: { events: NonNullable<Payload['events']> }) {
   return (
-    <section className="card span2" aria-labelledby="calTitle">
+    <section className="card" aria-labelledby="calTitle">
       <div className="card-head"><h2 id="calTitle">Kalender USD</h2><span className="sub">High dan medium impact saja. Waktu WIB, A = actual, F = forecast, P = previous</span></div>
       <div className="tbl-wrap">
         <table>
@@ -136,7 +136,7 @@ const pct = (v: number | null) => (v == null ? '–' : `${fmt(Math.abs(v) <= 1 ?
 export function Strategi({ s, rows, error }: { s: Payload['strategi']; rows: BacktestRow[] | null; error: string | null }) {
   const r = s?.regime
   return (
-    <section className="card span2" aria-labelledby="stratTitle">
+    <section className="card" aria-labelledby="stratTitle">
       <div className="card-head">
         <h2 id="stratTitle">Strategi</h2>
         {rows?.[0] && <span className="sub">Backtest {wibTime(rows[0].run_at)}</span>}

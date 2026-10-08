@@ -305,10 +305,20 @@ export default function App() {
             </div>
           </section>
           {a && (
-            <section className="card" aria-labelledby="newsTitle">
-              <div className="card-head"><h2 id="newsTitle">Prediksi news</h2></div>
-              <PrediksiNews items={a.prediksiNews ?? []} />
-            </section>
+            <>
+              <div className="duo">
+                <div className="stack">
+                  <Bias a={a} />
+                  <section className="card" aria-labelledby="newsTitle">
+                    <div className="card-head"><h2 id="newsTitle">Prediksi news</h2></div>
+                    <PrediksiNews items={a.prediksiNews ?? []} />
+                  </section>
+                </div>
+                <Levels a={a} off={off} price={spot} />
+              </div>
+              <Calendar events={a.events ?? []} />
+              <Strategi s={a.strategi} rows={bt.rows} error={bt.error} />
+            </>
           )}
         </div>
 
@@ -338,20 +348,12 @@ export default function App() {
           <RekamJejak rows={log.rows} error={log.error} />
           <Kinerja />
           {a?.amd && <Amd amd={a.amd} off={off} />}
+          {a && <Headlines items={a.headlines ?? []} />}
+          {a && <Notes notes={a.notes ?? []} />}
         </aside>
       </div>
 
       <div className="lower">
-        {a && (
-          <>
-            <Bias a={a} />
-            <Levels a={a} off={off} price={spot} />
-            <Notes notes={a.notes ?? []} />
-            <Calendar events={a.events ?? []} />
-            <Headlines items={a.headlines ?? []} />
-            <Strategi s={a.strategi} rows={bt.rows} error={bt.error} />
-          </>
-        )}
         {macro.rows && <Makro rows={macro.rows} />}
         <section className="card full" aria-labelledby="drvTitle">
           <div className="card-head">

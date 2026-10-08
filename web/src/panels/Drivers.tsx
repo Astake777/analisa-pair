@@ -88,7 +88,7 @@ export function Makro({ rows }: { rows: MacroRow[] }) {
   const series = MACRO.map((s) => ({ s, pts: rows.filter((r) => r.series === s) })).filter((x) => x.pts.length)
   if (!series.length) return null
   return (
-    <section className="card span2" aria-labelledby="makroTitle">
+    <section className="card full" aria-labelledby="makroTitle">
       <div className="card-head"><h2 id="makroTitle">Makro</h2><span className="sub">Data harian dan mingguan, perubahan dari titik sebelumnya</span></div>
       <div className="drivers">
         {series.map(({ s, pts }) => {
