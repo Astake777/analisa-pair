@@ -5,11 +5,13 @@ type Strat = {
   nama: string; status: string; sumber: string; earnings: number; totalReturn: number; annualReturn: number | null
   maxDrawdown: number; sharpe: number | null; sortino: number | null; calmar: number | null; winRate: number | null
   expectancy: number; expectancyR: number | null; posisi: number; kurva: [number, number][]; hari: number
+  dari?: number; sampai?: number
 }
 type Data = { dibuat: string; asumsi: string; mataUang?: string; strategi: Strat[] }
 
 const pct = (v: number | null, d = 2) => (v == null ? '-' : `${v > 0 ? '+' : ''}${(v * 100).toFixed(d)}%`)
 const num = (v: number | null) => (v == null ? '-' : v.toFixed(2))
+const tgl = (t: number) => new Date(t * 1000).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Jakarta' })
 const tone = (v: number | null) => (v == null ? '' : v > 0 ? 'up' : v < 0 ? 'down' : '')
 
 function Kurva({ pts }: { pts: [number, number][] }) {
@@ -61,6 +63,8 @@ export function Kinerja() {
           <>
             <Kurva pts={s.kurva} />
             <dl className="kin">
+              <div><dt>Durasi</dt><dd className="num">{s.hari} hari</dd></div>
+              <div><dt>Periode</dt><dd className="num">{s.dari && s.sampai ? `${tgl(s.dari)} – ${tgl(s.sampai)}` : '-'}</dd></div>
               <div><dt>Earnings</dt><dd className={`num ${tone(s.earnings)}`}>{s.earnings >= 0 ? '+' : '-'}{data.mataUang && data.mataUang !== 'USD' ? `${fmt(Math.abs(s.earnings), 2)} ${data.mataUang}` : `$${fmt(Math.abs(s.earnings), 2)}`}</dd></div>
               <div><dt>Total return</dt><dd className={`num ${tone(s.totalReturn)}`}>{pct(s.totalReturn)}</dd></div>
               <div><dt>Annual return</dt><dd className={`num ${tone(s.annualReturn)}`}>{s.annualReturn == null ? `- (${s.hari} hari)` : pct(s.annualReturn)}</dd></div>
@@ -72,7 +76,7 @@ export function Kinerja() {
               <div><dt>Expectancy</dt><dd className={`num ${tone(s.expectancy)}`}>{pct(s.expectancy)} ({s.expectancyR != null && s.expectancyR > 0 ? '+' : ''}{s.expectancyR}R)</dd></div>
               <div><dt>Posisi selesai</dt><dd className="num">{s.posisi}</dd></div>
             </dl>
-            <p className="sub kin-note">{s.nama}, {s.status}. {s.sumber}, {s.hari} hari. {data.asumsi}</p>
+            <p className="sub kin-note">{s.nama}, {s.status}. {s.sumber}. {s.sumber.includes('bukan OOS') ? data.asumsi.replace(' Hanya trade out-of-sample.', '') : data.asumsi}</p>
           </>
         )}
     </section>
