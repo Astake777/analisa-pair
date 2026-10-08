@@ -9,6 +9,7 @@ import { Amd, Bias, Calendar, Headlines, History, Levels, Notes, PrediksiNews, S
 import { ASET, Drivers, Makro } from './panels/Drivers'
 import { Menjelang, Outlook } from './panels/Outlook'
 import { RekamJejak, Setups } from './panels/Setups'
+import { Kinerja } from './panels/Kinerja'
 
 const PAIR = 'XAUUSD'
 const MODES: Mode[] = ['scalp', 'intraday', 'swing']
@@ -239,12 +240,15 @@ export default function App() {
               )}
             </div>
           </section>
-          {a && (
-            <section className="card" aria-labelledby="newsTitle">
-              <div className="card-head"><h2 id="newsTitle">Prediksi news</h2></div>
-              <PrediksiNews items={a.prediksiNews ?? []} />
-            </section>
-          )}
+          <div className="duo">
+            {a && (
+              <section className="card" aria-labelledby="newsTitle">
+                <div className="card-head"><h2 id="newsTitle">Prediksi news</h2></div>
+                <PrediksiNews items={a.prediksiNews ?? []} />
+              </section>
+            )}
+            <Kinerja />
+          </div>
         </div>
 
         <aside className="rail">

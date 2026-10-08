@@ -3,7 +3,7 @@
 Pakai:  python pantau.py [PAIR]            loop terus (dijalankan Claude lewat Monitor -> push ke HP)
         python pantau.py [PAIR] --sekali   satu putaran
         python pantau.py [PAIR] --uji      publikasi setup UJI dari harga sekarang, lalu kembalikan analisis semula
-Baris keluaran (stdout = event): SETUP, TERISI, SELESAI, BATAL, ERROR. Selain itu diam.
+Baris keluaran (stdout = event): SETUP, TERISI, SELESAI, BATAL, ERROR (sekali per jenis), PULIH.
 Aturan setup:
   - batal kalau belum terisi dan harga sudah BATAL_FRAC (70%) jalan ke TP1, atau limit lewat EXPIRE_S strategi;
   - setup searah yang zonanya berdekatan (< DEKAT dollar) hanya disimpan satu: lulus validasi dulu, lalu skor,
@@ -339,13 +339,19 @@ def main(args):
     pair = next((a.upper() for a in args if not a.startswith("--")), "XAUUSD")
     if "--uji" in args:
         return uji(pair)
-    state = baca(pair)
+    state, gagal = baca(pair), None
     while True:
         try:
             putaran(pair, state)
             simpan(pair, state)
-        except Exception as e:  # satu putaran gagal (jaringan) tidak menghentikan watcher
-            print(f"ERROR pantau: {type(e).__name__}: {e}", flush=True)
+            if gagal:
+                print("PULIH pantau: koneksi data kembali normal", flush=True)
+            gagal = None
+        except Exception as e:  # satu putaran gagal (jaringan) tidak menghentikan watcher; error sama dilaporkan sekali
+            jenis = type(e).__name__
+            if jenis != gagal:
+                print(f"ERROR pantau: {jenis}: {e}", flush=True)
+            gagal = jenis
         if "--sekali" in args:
             return
         time.sleep(60 - time.time() % 60 + 5)  # 5 detik setelah candle 1m tutup
