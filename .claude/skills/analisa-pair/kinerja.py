@@ -49,8 +49,15 @@ def metrik(trades, t0, t1):
         "calmar": r2(annual / dd, 2) if dd and annual is not None else None,
         "winRate": r2(sum(x["r_net"] > 0 for x in trades) / n) if n else None,
         "expectancy": r2(rata), "expectancyR": r2(sum(x["r_net"] for x in trades) / n, 2) if n else None,
-        "posisi": n, "kurva": kurva, "dari": t0, "sampai": t1, "hari": round(hari),
+        "posisi": n, "kurva": kurva, "dari": t0, "sampai": t1, "hari": round(hari), "avgRR": rr_rata(trades),
     }
+
+
+def rr_rata(trades):
+    """Rata-rata RR rencana per trade: jarak TP / jarak SL dari entry (SL awal)."""
+    rr = [abs(x["tp"] - x["entry"]) / abs(x["entry"] - x["sl"]) for x in trades
+          if x.get("tp") is not None and x.get("sl") is not None and x.get("entry") is not None and x["entry"] != x["sl"]]
+    return round(sum(rr) / len(rr), 2) if rr else None
 
 
 def terbaru(pola):
@@ -97,7 +104,8 @@ def ea_mt5():
     t1 = int(tr[-1]["waktu_utc"])
     tt, prev = [], modal
     for r in tr:   # r_net setara: majemuk RISIKO * r_net = pl / saldo sebelum -> kurva sama dengan saldo nyata
-        tt.append({"masuk": int(r["masuk_utc"]), "keluar": int(r["waktu_utc"]), "r_net": float(r["pl"]) / prev / RISIKO})
+        tt.append({"masuk": int(r["masuk_utc"]), "keluar": int(r["waktu_utc"]), "r_net": float(r["pl"]) / prev / RISIKO,
+                   "entry": float(r["entry"]), "sl": float(r["sl"]), "tp": float(r["tp"])})
         prev = float(r["saldo"])
     global MODAL
     lama, MODAL = MODAL, modal
@@ -112,6 +120,7 @@ def ea_mt5():
 
 
 def _selftest():
+    assert rr_rata([{"entry": 100, "sl": 97, "tp": 110}, {"entry": 100, "sl": 102, "tp": 96}, {"entry": 1, "sl": None, "tp": 2}]) == 2.67
     D = 86400
     tr = [{"masuk": i * D, "keluar": i * D + 3600, "r_net": 3.0 if i % 2 else -1.0} for i in range(10)]
     m = metrik(tr, 0, 365 * D)

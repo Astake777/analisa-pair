@@ -5,7 +5,7 @@ type Strat = {
   nama: string; status: string; sumber: string; earnings: number; totalReturn: number; annualReturn: number | null
   maxDrawdown: number; sharpe: number | null; sortino: number | null; calmar: number | null; winRate: number | null
   expectancy: number; expectancyR: number | null; posisi: number; kurva: [number, number][]; hari: number
-  dari?: number; sampai?: number
+  dari?: number; sampai?: number; avgRR?: number | null
 }
 type Data = { dibuat: string; asumsi: string; mataUang?: string; strategi: Strat[] }
 
@@ -64,17 +64,19 @@ export function Kinerja() {
             <Kurva pts={s.kurva} />
             <dl className="kin">
               <div><dt>Durasi</dt><dd className="num">{s.hari} hari</dd></div>
-              <div><dt>Periode</dt><dd className="num">{s.dari && s.sampai ? `${tgl(s.dari)} – ${tgl(s.sampai)}` : '-'}</dd></div>
+              <div className="dua"><dt>Periode</dt><dd className="num">{s.dari && s.sampai ? `${tgl(s.dari)} – ${tgl(s.sampai)}` : '-'}</dd></div>
               <div><dt>Earnings</dt><dd className={`num ${tone(s.earnings)}`}>{s.earnings >= 0 ? '+' : '-'}{data.mataUang && data.mataUang !== 'USD' ? `${fmt(Math.abs(s.earnings), 2)} ${data.mataUang}` : `$${fmt(Math.abs(s.earnings), 2)}`}</dd></div>
-              <div><dt>Total return</dt><dd className={`num ${tone(s.totalReturn)}`}>{pct(s.totalReturn)}</dd></div>
-              <div><dt>Annual return</dt><dd className={`num ${tone(s.annualReturn)}`}>{s.annualReturn == null ? `- (${s.hari} hari)` : pct(s.annualReturn)}</dd></div>
-              <div><dt>Max drawdown</dt><dd className="num down">{pct(s.maxDrawdown)}</dd></div>
-              <div><dt>Sharpe</dt><dd className={`num ${tone(s.sharpe)}`}>{num(s.sharpe)}</dd></div>
+              <div><dt>Total return</dt><dd className={`num ${tone(s.totalReturn)}`}>{pct(s.totalReturn, 1)}</dd></div>
+              <div><dt>Annual return</dt><dd className={`num ${tone(s.annualReturn)}`}>{s.annualReturn == null ? '-' : pct(s.annualReturn, 1)}{s.annualReturn == null && <small>periode &lt; 90 hari</small>}</dd></div>
+              <div><dt>Max drawdown</dt><dd className="num down">{pct(s.maxDrawdown, 1)}</dd></div>
               <div><dt>Win rate</dt><dd className="num">{pct(s.winRate, 1).replace('+', '')}</dd></div>
+              <div><dt>Avg RR</dt><dd className="num">{s.avgRR == null ? '-' : `1:${s.avgRR.toFixed(2)}`}</dd></div>
+              <div><dt>Expectancy</dt><dd className={`num ${tone(s.expectancy)}`}>{s.expectancyR != null && s.expectancyR > 0 ? '+' : ''}{s.expectancyR ?? '-'}R<small>{pct(s.expectancy)} / trade</small></dd></div>
+              <div><dt>Trade / bulan</dt><dd className="num">{s.hari ? fmt((s.posisi / s.hari) * 30.4, 1) : '-'}</dd></div>
+              <div><dt>Posisi selesai</dt><dd className="num">{s.posisi}</dd></div>
+              <div><dt>Sharpe</dt><dd className={`num ${tone(s.sharpe)}`}>{num(s.sharpe)}</dd></div>
               <div><dt>Sortino</dt><dd className={`num ${tone(s.sortino)}`}>{num(s.sortino)}</dd></div>
               <div><dt>Calmar</dt><dd className={`num ${tone(s.calmar)}`}>{num(s.calmar)}</dd></div>
-              <div><dt>Expectancy</dt><dd className={`num ${tone(s.expectancy)}`}>{pct(s.expectancy)} ({s.expectancyR != null && s.expectancyR > 0 ? '+' : ''}{s.expectancyR}R)</dd></div>
-              <div><dt>Posisi selesai</dt><dd className="num">{s.posisi}</dd></div>
             </dl>
             <p className="sub kin-note">{s.nama}, {s.status}. {s.sumber}. {s.sumber.includes('bukan OOS') ? data.asumsi.replace(' Hanya trade out-of-sample.', '') : data.asumsi}</p>
           </>
