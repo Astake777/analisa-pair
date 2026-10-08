@@ -48,18 +48,28 @@ bool     tester;
 datetime news[];                         // event USD high dari analisa_news.csv (epoch UTC, urut)
 datetime news_muat = 0;
 int      fcsv = INVALID_HANDLE;          // log tester SniperBot_tester.csv
+string   terakhir = "";                  // pesan log terakhir (untuk status ke Claude)
+datetime status_t = 0;
+#define CMD_FILE    "sniperbot_cmd.txt"     // perintah dari ea_kontrol.py (Common\Files)
+#define STATUS_FILE "sniperbot_status.json"
 
 //--- util
 void Log(string s)
 {
    Print(s);
+   terakhir = s;
    if(!tester)
       SendNotification(s);
 }
 
 double N(double x) { return NormalizeDouble(x, _Digits); }
 
-double RiskFrac() { return MathMin(MathMax(Risk_Percentage, 25.0), 30.0) / 100.0; }
+// override dari Claude (ea_kontrol.py) disimpan di global variable terminal, bertahan saat restart
+string GV(string k) { return StringFormat("SniperBot_%I64d_%s", Magic, k); }
+double Override(string k, double bawaan) { return !tester && GlobalVariableCheck(GV(k)) ? GlobalVariableGet(GV(k)) : bawaan; }
+double RiskFrac() { return MathMin(MathMax(Override("risk", Risk_Percentage), 25.0), 30.0) / 100.0; }
+double BePips() { return Override("be", BE_Trigger_Pips); }
+bool   Dijeda() { return Override("pause", 0) > 0; }
 
 //--- waktu: server HFM = UTC+3 saat DST AS, selain itu UTC+2 (TimeGMT tidak jalan di tester)
 datetime MingguKe(int y, int m, int n)   // hari Minggu ke-n bulan m, jam 00:00
@@ -365,6 +375,7 @@ void Catat(string jenis, datetime w, datetime masuk, bool beli, double entry, do
 bool BolehOrder(string &alasan)
 {
    ResetHarian();
+   if(Dijeda())                    { alasan = "dijeda dari Claude"; return false; }
    if(n_sl >= Max_SL_Harian)       { alasan = StringFormat("batas harian: %d SL hari ini", n_sl); return false; }
    if(n_entry >= Max_Entry_Harian) { alasan = StringFormat("batas harian: %d entry hari ini", n_entry); return false; }
    if(Terbuka() > 0)               { alasan = "masih ada order/posisi bot"; return false; }
@@ -414,7 +425,8 @@ void Pasang(const Poi &z, double ujung, datetime tsig)
 void Kelola()
 {
    double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID), ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
-   if(BE_Trigger_Pips > 0 && TimeCurrent() - be_gagal >= 10)
+   double be_pips = BePips();
+   if(be_pips > 0 && TimeCurrent() - be_gagal >= 10)
       for(int i = PositionsTotal() - 1; i >= 0; i--)
       {
          ulong tk = PositionGetTicket(i);
@@ -423,7 +435,7 @@ void Kelola()
          double buka = PositionGetDouble(POSITION_PRICE_OPEN), sl = PositionGetDouble(POSITION_SL), tp = PositionGetDouble(POSITION_TP);
          double pips = (beli ? bid - buka : buka - ask) / PIP;
          bool belum = beli ? sl < buka : (sl == 0 || sl > buka);
-         if(pips < BE_Trigger_Pips || !belum) continue;
+         if(pips < be_pips || !belum) continue;
          trade.SetExpertMagicNumber(Magic);
          if(trade.PositionModify(tk, buka, tp))
             Log(StringFormat("BOT BE %s %.2f: SL digeser ke entry (profit %+.1f pips)", beli ? "BUY" : "SELL", buka, pips));
@@ -446,6 +458,109 @@ void Kelola()
       if(alasan != "" && trade.OrderDelete(tk))
          Log(StringFormat("BOT BATAL %s %.2f: %s", beli ? "BUY" : "SELL", e, alasan));
    }
+}
+
+//--- kontrol dari Claude: ea_kontrol.py menulis "id|PERINTAH" ke CMD_FILE, EA menjalankan lalu menulis status + ack
+void TutupSemua()
+{
+   trade.SetExpertMagicNumber(Magic);
+   for(int i = OrdersTotal() - 1; i >= 0; i--)
+   {
+      ulong tk = OrderGetTicket(i);
+      if(tk > 0 && OrderGetString(ORDER_SYMBOL) == _Symbol && OrderGetInteger(ORDER_MAGIC) == Magic) trade.OrderDelete(tk);
+   }
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+   {
+      ulong tk = PositionGetTicket(i);
+      if(tk > 0 && PositionGetString(POSITION_SYMBOL) == _Symbol && PositionGetInteger(POSITION_MAGIC) == Magic) trade.PositionClose(tk);
+   }
+}
+
+string Jalankan(string cmd)
+{
+   string k = cmd, v = "";
+   int eq = StringFind(cmd, "=");
+   if(eq > 0) { k = StringSubstr(cmd, 0, eq); v = StringSubstr(cmd, eq + 1); }
+   StringToUpper(k);
+   double x = StringToDouble(v);
+   if(k == "PAUSE")  { GlobalVariableSet(GV("pause"), 1); return "dijeda: tidak ada order baru, posisi tetap dikelola"; }
+   if(k == "RESUME") { GlobalVariableDel(GV("pause")); return "jalan lagi"; }
+   if(k == "STOP")   { GlobalVariableSet(GV("pause"), 1); TutupSemua(); return "STOP: order dibatalkan, posisi ditutup, EA dijeda"; }
+   if(k == "RISK")
+   {
+      if(x < 25 || x > 30) return "ditolak: RISK harus 25-30";
+      GlobalVariableSet(GV("risk"), x);
+      return StringFormat("risiko jadi %.1f%% saldo", x);
+   }
+   if(k == "BE")
+   {
+      if(v == "" || x < 0) return "ditolak: BE harus angka >= 0";
+      GlobalVariableSet(GV("be"), x);
+      return x > 0 ? StringFormat("auto BE di +%.0f pips", x) : "auto BE mati";
+   }
+   if(k == "RESET")  { GlobalVariableDel(GV("risk")); GlobalVariableDel(GV("be")); return "risk/BE kembali ke input EA"; }
+   if(k == "STATUS") return "status";
+   return "perintah tidak dikenal: " + cmd;
+}
+
+void TulisStatus(string ack, string hasil)
+{
+   string pos = "";
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+   {
+      ulong tk = PositionGetTicket(i);
+      if(tk == 0 || PositionGetString(POSITION_SYMBOL) != _Symbol || PositionGetInteger(POSITION_MAGIC) != Magic) continue;
+      pos += StringFormat("%s{\"tiket\":%I64u,\"side\":\"%s\",\"lot\":%.2f,\"buka\":%.2f,\"sl\":%.2f,\"tp\":%.2f,\"profit\":%.2f}",
+                          pos == "" ? "" : ",", tk, PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY ? "buy" : "sell",
+                          PositionGetDouble(POSITION_VOLUME), PositionGetDouble(POSITION_PRICE_OPEN), PositionGetDouble(POSITION_SL),
+                          PositionGetDouble(POSITION_TP), PositionGetDouble(POSITION_PROFIT));
+   }
+   string ord = "";
+   for(int i = OrdersTotal() - 1; i >= 0; i--)
+   {
+      ulong tk = OrderGetTicket(i);
+      if(tk == 0 || OrderGetString(ORDER_SYMBOL) != _Symbol || OrderGetInteger(ORDER_MAGIC) != Magic) continue;
+      ord += StringFormat("%s{\"tiket\":%I64u,\"side\":\"%s\",\"lot\":%.2f,\"entry\":%.2f,\"sl\":%.2f,\"tp\":%.2f}",
+                          ord == "" ? "" : ",", tk, OrderGetInteger(ORDER_TYPE) == ORDER_TYPE_BUY_LIMIT ? "buy" : "sell",
+                          OrderGetDouble(ORDER_VOLUME_INITIAL), OrderGetDouble(ORDER_PRICE_OPEN), OrderGetDouble(ORDER_SL), OrderGetDouble(ORDER_TP));
+   }
+   string alasan = "", log_akhir = terakhir;
+   bool boleh = BolehOrder(alasan);
+   StringReplace(log_akhir, "\"", "'");
+   StringReplace(hasil, "\"", "'");
+   string js = StringFormat("{\"ack\":\"%s\",\"hasil\":\"%s\",\"waktu_utc\":%I64d,\"saldo\":%.2f,\"ekuitas\":%.2f,\"mata_uang\":\"%s\","
+                            "\"algo_trading\":%s,\"dijeda\":%s,\"risk_persen\":%.1f,\"be_pips\":%.0f,\"boleh_order\":%s,\"alasan\":\"%s\","
+                            "\"sl_hari_ini\":%d,\"entry_hari_ini\":%d,\"poi_aktif\":%d,\"posisi\":[%s],\"order\":[%s],\"log_terakhir\":\"%s\"}",
+                            ack, hasil, (long)KeUtc(TimeCurrent()), AccountInfoDouble(ACCOUNT_BALANCE), AccountInfoDouble(ACCOUNT_EQUITY),
+                            AccountInfoString(ACCOUNT_CURRENCY), TerminalInfoInteger(TERMINAL_TRADE_ALLOWED) ? "true" : "false",
+                            Dijeda() ? "true" : "false", RiskFrac() * 100, BePips(), boleh ? "true" : "false", alasan,
+                            n_sl, n_entry, ArraySize(pois), pos, ord, log_akhir);
+   int f = FileOpen(STATUS_FILE + ".tmp", FILE_WRITE | FILE_TXT | FILE_ANSI | FILE_COMMON);
+   if(f == INVALID_HANDLE) return;
+   FileWriteString(f, js);
+   FileClose(f);
+   FileMove(STATUS_FILE + ".tmp", FILE_COMMON, STATUS_FILE, FILE_COMMON | FILE_REWRITE);
+   status_t = TimeCurrent();
+}
+
+void OnTimer()
+{
+   if(FileIsExist(CMD_FILE, FILE_COMMON))
+   {
+      int f = FileOpen(CMD_FILE, FILE_READ | FILE_TXT | FILE_ANSI | FILE_COMMON);
+      string baris = f == INVALID_HANDLE ? "" : FileReadString(f);
+      if(f != INVALID_HANDLE) FileClose(f);
+      FileDelete(CMD_FILE, FILE_COMMON);
+      StringTrimLeft(baris);
+      StringTrimRight(baris);
+      int bar = StringFind(baris, "|");
+      string id = bar > 0 ? StringSubstr(baris, 0, bar) : "", cmd = bar > 0 ? StringSubstr(baris, bar + 1) : baris;
+      string hasil = Jalankan(cmd);
+      if(hasil != "status") Log("BOT KONTROL " + cmd + ": " + hasil);
+      TulisStatus(id, hasil);
+      return;
+   }
+   if(TimeCurrent() - status_t >= 30) TulisStatus("", "");
 }
 
 //--- event MT5
@@ -475,12 +590,15 @@ int OnInit()
    trade.SetDeviationInPoints(20);
    Log(StringFormat("BOT MULAI %s, risiko %.0f%% saldo = %.2f %s/trade (lot dinamis dari lebar SL), auto BE %s",
                     _Symbol, RiskFrac() * 100, AccountInfoDouble(ACCOUNT_BALANCE) * RiskFrac(), AccountInfoString(ACCOUNT_CURRENCY),
-                    BE_Trigger_Pips > 0 ? StringFormat("+%.0f pips", BE_Trigger_Pips) : "mati"));
+                    BePips() > 0 ? StringFormat("+%.0f pips", BePips()) : "mati"));
+   if(!tester)
+      EventSetTimer(2);
    return INIT_SUCCEEDED;
 }
 
 void OnDeinit(const int reason)
 {
+   EventKillTimer();
    IndicatorRelease(hE20H1); IndicatorRelease(hE50H1); IndicatorRelease(hE20M30); IndicatorRelease(hE50M30);
    if(fcsv != INVALID_HANDLE) { FileClose(fcsv); fcsv = INVALID_HANDLE; }
 }

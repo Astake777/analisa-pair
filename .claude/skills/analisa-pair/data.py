@@ -261,8 +261,19 @@ def _fetch_mt5(sym, tf, refresh):
     old, fresh = _cached(path, tf, refresh)
     if fresh:
         return old
-    start = old[-1][0] if old else int(time.time()) - MT5_DAYS[tf] * 86400
-    return _save(path, merge(old, mt5_link.candles(sym.removeprefix("MT5_"), tf, start)))
+    target = int(time.time()) - MT5_DAYS[tf] * 86400
+    nama = sym.removeprefix("MT5_")
+    baru = mt5_link.candles(nama, tf, old[-1][0] if old else target)
+    if old and old[0][0] > target + 86400 and path not in _isi_mundur:   # cache lebih pendek dari MT5_DAYS
+        _isi_mundur.add(path)   # sekali per proses: riwayat broker bisa bertambah (Max bars Unlimited)
+        try:
+            baru = mt5_link.candles(nama, tf, target, old[0][0]) + baru
+        except OSError:
+            pass
+    return _save(path, merge(old, baru))
+
+
+_isi_mundur = set()
 
 
 def _ambil(sym, tf, refresh):
