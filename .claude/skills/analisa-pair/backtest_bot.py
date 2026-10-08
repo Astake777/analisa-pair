@@ -1,7 +1,7 @@
 """Backtest BOT: aturan bot_mt5.py dijalankan atas riwayat, dalam dollar, di data broker HFM.
 
-Aturan yang ditiru: modal BOT_MODAL, risiko BOT_RISK per trade, lot dibulatkan ke bawah 0.01 (lewati kalau lot
-minimum melebihi risiko), maks 1 order/posisi, maks MAKS_SL_HARIAN SL dan MAKS_ENTRY_HARIAN entry per hari WIB,
+Aturan yang ditiru: modal BOT_MODAL, lot dinamis bot_mt5.lot_untuk (BOT_RISK_PERCENTAGE 25-30% saldo / (SL pips x $10),
+dibulatkan ke bawah 0.01, lewati kalau lot minimum melebihi risiko), maks 1 order/posisi, maks MAKS_SL_HARIAN SL dan MAKS_ENTRY_HARIAN entry per hari WIB,
 tidak ada order dalam NEWS_MENIT dari news USD high impact, limit harus tembus 0.10, batal kalau harga sudah 70%
 ke TP1, kedaluwarsa EXPIRE_S strategi, biaya = spread HFM + slip 0.10.
 Data: candle HFM (MT5); M1 sebelum riwayat M1 HFM diisi XAUT Binance yang digeser ke harga HFM (median selisih
@@ -22,14 +22,15 @@ from bisect import bisect_left
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from backtest import metrik, simulasi  # noqa: E402
-from bot_mt5 import MAKS_ENTRY_HARIAN, MAKS_SL_HARIAN, NEWS_MENIT, hari_wib, konfig  # noqa: E402
+from bot_mt5 import MAKS_ENTRY_HARIAN, MAKS_SL_HARIAN, NEWS_MENIT, hari_wib, konfig, lot_untuk  # noqa: E402
 from regime import STEP  # noqa: E402
 from validasi import BATAL_FRAC, TEMBUS  # noqa: E402
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..")
 OUT = os.path.join(ROOT, "data", "backtest")
 NILAI_TITIK = 100.0    # XAUUSD lot standar: $1 per lot per gerak $0.01 -> $100 per lot per $1
-LOT_MIN = LOT_STEP = 0.01
+SYM_HFM = type("Sym", (), {"trade_tick_size": 0.01, "trade_tick_value": 1.0, "volume_min": 0.01, "volume_step": 0.01,
+                            "volume_max": 50.0})
 
 
 def gabung_1m(hfm, xaut):
@@ -56,14 +57,13 @@ def jalankan(trades, modal, risiko, news, cost):
             alasan = "batas harian"
         elif any(abs(x["sinyal"] - t) <= NEWS_MENIT * 60 for t in news):
             alasan = "jendela news"
-        jarak = abs(x["entry"] - x["sl"])
-        lot = int(eq * risiko / (jarak * NILAI_TITIK) / LOT_STEP + 1e-9) * LOT_STEP
-        if alasan is None and lot < LOT_MIN:
+        lot, rc = lot_untuk(SYM_HFM, x["entry"], x["sl"], eq, risiko)
+        if alasan is None and lot is None:
             alasan = "lot minimum melebihi risiko"
         if alasan:
             lewati.append(alasan)
             continue
-        risiko_usd = lot * jarak * NILAI_TITIK
+        risiko_usd = rc["rugi_di_sl"]
         pl = x["r"] * risiko_usd - cost * lot * NILAI_TITIK
         eq += pl
         d["entry"] += 1
@@ -163,15 +163,15 @@ def main(nama_list):
 def _selftest():
     D = 86400
     tr = lambda t, r, hasil: {"sinyal": t, "masuk": t, "keluar": t + 600, "entry": 100.0, "sl": 97.0, "r": r, "hasil": hasil}
-    # modal 100, risiko 10%: SL $3 -> $300/lot -> lot 0.03 (risiko $9)
-    x, lw = jalankan([tr(D, 3.0, "TP")], 100, 0.10, [], 0.46)
-    assert x[0]["lot"] == 0.03 and abs(x[0]["pl"] - (3 * 9 - 0.46 * 3)) < 1e-6, x
+    # modal 100, risiko 25% = $25: SL 30 pips x $10 -> lot 0.08 (rugi di SL $24)
+    x, lw = jalankan([tr(D, 3.0, "TP")], 100, 0.25, [], 0.46)
+    assert x[0]["lot"] == 0.08 and abs(x[0]["pl"] - (3 * 24 - 0.46 * 8)) < 1e-6, x
     # posisi tumpang tindih dilewati; batas 2 SL per hari
-    x, lw = jalankan([tr(D, -1, "SL"), tr(D + 60, 3, "TP"), tr(D + 1000, -1, "SL"), tr(D + 2000, 3, "TP")], 100, 0.10, [], 0)
+    x, lw = jalankan([tr(D, -1, "SL"), tr(D + 60, 3, "TP"), tr(D + 1000, -1, "SL"), tr(D + 2000, 3, "TP")], 100, 0.25, [], 0)
     assert len(x) == 2 and lw == ["masih ada order/posisi", "batas harian"], (x, lw)
     # jendela news dan lot minimum
-    assert jalankan([tr(D, 3, "TP")], 100, 0.10, [D + 300], 0)[1] == ["jendela news"]
-    assert jalankan([tr(D, 3, "TP")], 10, 0.01, [], 0)[1] == ["lot minimum melebihi risiko"]
+    assert jalankan([tr(D, 3, "TP")], 100, 0.25, [D + 300], 0)[1] == ["jendela news"]
+    assert jalankan([tr(D, 3, "TP")], 10, 0.25, [], 0)[1] == ["lot minimum melebihi risiko"]
     rows, g, n = gabung_1m([[1000, 0, 0, 0, 12, 0], [1060, 0, 0, 0, 13, 0]],
                            [[880, 0, 0, 0, 8, 0], [940, 0, 0, 0, 9, 0], [1000, 0, 0, 0, 10, 0], [1060, 0, 0, 0, 11, 0]])
     assert g == 2.0 and n == 2 and rows[0] == [880, 2.0, 2.0, 2.0, 10.0, 0] and len(rows) == 4, (rows, g)

@@ -1,6 +1,6 @@
 """Kinerja backtest untuk panel website: equity curve dan metrik dari trade OUT-OF-SAMPLE saja.
 
-Asumsi akun: modal MODAL dollar, risiko per trade = BOT_RISK di .env (bawaan 5%), majemuk; R bersih biaya.
+Asumsi akun: modal MODAL dollar, risiko per trade = BOT_RISK_PERCENTAGE di .env (25-30% saldo), majemuk; R bersih biaya.
 Sumber: sniper = trade OOS walk-forward terbaru validasi.py; scalp/intraday = sample OOS tren_pullback backtest.py terbaru.
 Pakai:  python kinerja.py            menulis web/public/kinerja.json
 Self-check: python kinerja.py --selftest
@@ -125,13 +125,13 @@ def main():
     global RISIKO, MODAL, MATA_UANG
     import bot_mt5
     import data
-    RISIKO = bot_mt5.konfig(data.env())["risiko"]   # sama dengan risiko bot (BOT_RISK)
+    RISIKO = bot_mt5.konfig(data.env())["risiko"]   # sama dengan risiko bot (BOT_RISK_PERCENTAGE)
     e = data.env()
     MODAL = float(e.get("BOT_MODAL", MODAL))
     MATA_UANG = e.get("BOT_MATA_UANG", MATA_UANG)
     out = {"dibuat": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
            "mataUang": MATA_UANG, "modal": MODAL,
-           "asumsi": f"Modal {MODAL:,.0f} {MATA_UANG}{' (akun cent, = $' + format(MODAL / 100, ',.0f') + ')' if MATA_UANG == 'USC' else ''}, risiko {RISIKO * 100:.1f}% ekuitas per trade (BOT_RISK), majemuk, biaya spread+slip dihitung. "
+           "asumsi": f"Modal {MODAL:,.0f} {MATA_UANG}{' (akun cent, = $' + format(MODAL / 100, ',.0f') + ')' if MATA_UANG == 'USC' else ''}, risiko {RISIKO * 100:.1f}% saldo per trade (BOT_RISK_PERCENTAGE, lot dinamis dari lebar SL), majemuk, biaya spread+slip dihitung. "
                      "Hanya trade out-of-sample.",
            "strategi": [x for x in (bot_hfm(), sniper(), tren_pullback("scalp"), tren_pullback("intraday")) if x]}
     os.makedirs(os.path.dirname(OUT), exist_ok=True)

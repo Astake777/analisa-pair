@@ -6,7 +6,9 @@ Pakai:  python bot_mt5.py              loop (Claude menjalankannya lewat Monitor
         python bot_mt5.py --stop       kill switch: batalkan order bot, tutup posisi bot
         python bot_mt5.py --uji-order  DEMO SAJA: pasang order limit lot minimum jauh dari harga lalu batalkan
 .env:   MT5_LOGIN / MT5_PASSWORD / MT5_SERVER (akun demo HFM), BOT_MODE=demo|live (bawaan demo),
-        BOT_RISK=0.05 (fraksi ekuitas per trade, dibatasi 0.10), opsional MT5_SYMBOL, MT5_PATH.
+        BOT_RISK_PERCENTAGE=25 (persen saldo per trade, dikunci 25-30), opsional MT5_SYMBOL, MT5_PATH.
+Lot dinamis: Risk_Amount = saldo akun x Risk_Percentage / 100; Lot = Risk_Amount / (SL_pips x Pip_Value),
+dibulatkan ke bawah ke step broker. SL lebar -> lot kecil, rugi di SL tetap = Risk_Amount.
 Pengaman (dicek sebelum setiap order):
   - akun real ditolak kecuali BOT_MODE=live DAN strategi lulus validasi DAN syarat real test demo lulus;
   - berhenti order baru setelah MAKS_SL_HARIAN SL atau MAKS_ENTRY_HARIAN entry dalam satu hari WIB;
@@ -36,10 +38,11 @@ STATE_FILE = os.path.join(ROOT, "data", "bot_state.json")
 TFS = ["1m", "5m", "15m", "30m", "1h", "4h", "1d"]
 HARI_DATA = 60
 MAGIC = 770077
-RISIKO_MAKS = 0.10
+RISIKO_MIN, RISIKO_MAKS = 0.25, 0.30
+PIP = 0.10   # 1 pip XAUUSD
 MAKS_SL_HARIAN, MAKS_ENTRY_HARIAN, MAKS_TERBUKA = 2, 3, 1
 NEWS_MENIT, SPREAD_X = 15, 3.0
-SYARAT_LIVE = {"trade": 30, "expectancy": 0.15, "dd": 0.10, "beda_winrate": 0.15, "slip": 0.30}
+SYARAT_LIVE = {"trade": 30, "expectancy": 0.15, "dd": 0.60, "beda_winrate": 0.15, "slip": 0.30}
 WIB = 7 * 3600
 r2 = lambda x: round(x, 2)
 
@@ -47,26 +50,30 @@ r2 = lambda x: round(x, 2)
 def konfig(e):
     mode = e.get("BOT_MODE", "demo").strip().lower()
     try:
-        risiko = float(e.get("BOT_RISK", "0.05"))
+        risiko = float(e.get("BOT_RISK_PERCENTAGE", "25")) / 100
     except ValueError:
-        risiko = 0.05
-    return {"mode": "live" if mode == "live" else "demo", "risiko": min(max(risiko, 0.001), RISIKO_MAKS)}
+        risiko = RISIKO_MIN
+    return {"mode": "live" if mode == "live" else "demo", "risiko": min(max(risiko, RISIKO_MIN), RISIKO_MAKS)}
 
 
 def hari_wib(t):
     return dt.datetime.fromtimestamp(t + WIB, dt.timezone.utc).strftime("%Y-%m-%d")
 
 
-def lot_untuk(sym, entry, sl, ekuitas, risiko):
-    """Lot supaya kena SL = rugi risiko x ekuitas; dibulatkan ke bawah ke volume_step. None kalau lot minimum
-    sudah melebihi risiko."""
-    rugi_per_lot = abs(entry - sl) / sym.trade_tick_size * sym.trade_tick_value
-    if rugi_per_lot <= 0:
-        return None
-    lot = math.floor(ekuitas * risiko / rugi_per_lot / sym.volume_step + 1e-9) * sym.volume_step
+def lot_untuk(sym, entry, sl, saldo, risiko):
+    """Lot dinamis: Risk_Amount / (SL_pips x Pip_Value), dibulatkan ke bawah ke volume_step.
+    -> (lot, rinci); lot None kalau lot minimum sudah melebihi Risk_Amount."""
+    risk_amount = saldo * risiko
+    sl_pips = abs(entry - sl) / PIP
+    pip_value = PIP / sym.trade_tick_size * sym.trade_tick_value   # $ per pip per 1 lot
+    rinci = {"risk_amount": round(risk_amount, 2), "sl_pips": round(sl_pips, 1), "pip_value": round(pip_value, 2)}
+    if sl_pips <= 0 or pip_value <= 0:
+        return None, rinci
+    lot = math.floor(risk_amount / (sl_pips * pip_value) / sym.volume_step + 1e-9) * sym.volume_step
     if lot < sym.volume_min:
-        return None
-    return round(min(lot, sym.volume_max), 2)
+        return None, rinci
+    lot = round(min(lot, sym.volume_max), 2)
+    return lot, {**rinci, "rugi_di_sl": round(lot * sl_pips * pip_value, 2)}
 
 
 def izin_akun(akun, cfg, valid, syarat_ok):
@@ -139,10 +146,10 @@ class Bot:
             "risiko": self.cfg["risiko"], "entry": s["entry"], "harga_isi": None, "sl": s["sl"], "tp": s["tp"][0],
             "order_ticket": None, "posisi_ticket": None,
             "dibuat": dt.datetime.fromtimestamp(s["time"], dt.timezone.utc).isoformat(),
-            "dibuka": None, "ditutup": None, "status": "PENDING", "pl": None, "r": None, "ekuitas_awal": None})
+            "dibuka": None, "ditutup": None, "status": "PENDING", "pl": None, "r": None, "risiko_usd": None})
         j.update(kw)
         j["updated_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
-        self.ubah.append({k: v for k, v in j.items() if k != "ekuitas_awal"})
+        self.ubah.append({k: v for k, v in j.items() if k not in ("risiko_usd", "ekuitas_awal")})
         return j
 
     def _harian(self, now):
@@ -200,8 +207,7 @@ class Bot:
                 p = posisi.get(j["order_ticket"])
                 if p is not None:
                     self._baris(j, status="TERBUKA", posisi_ticket=p.ticket, harga_isi=p.price_open,
-                                dibuka=dt.datetime.fromtimestamp(p.time, dt.timezone.utc).isoformat(),
-                                ekuitas_awal=self.akun.equity)
+                                dibuka=dt.datetime.fromtimestamp(p.time, dt.timezone.utc).isoformat())
                     h["entry"] += 1
                     self.cetak(f"BOT TERISI {j['side'].upper()} {j['lot']} lot @ {p.price_open} (rencana {j['entry']}, "
                                f"SL {j['sl']}, TP {j['tp']})")
@@ -211,7 +217,7 @@ class Bot:
                     self._baris(j, status="BATAL: kedaluwarsa tanpa terisi")
                     self.cetak(f"BOT BATAL {j['side'].upper()} {j['entry']}: kedaluwarsa tanpa terisi")
                     continue
-                j.update(posisi_ticket=j["order_ticket"], status="TERBUKA", ekuitas_awal=self.akun.equity)
+                j.update(posisi_ticket=j["order_ticket"], status="TERBUKA")
                 h["entry"] += 1   # terisi dan sudah tutup di antara dua putaran
             if j["status"] == "TERBUKA" and j["posisi_ticket"] not in {p.ticket for p in posisi.values()}:
                 deals = self.mt5.history_deals_get(position=j["posisi_ticket"]) or []
@@ -226,14 +232,16 @@ class Bot:
                 hasil = "TP" if harga is not None and abs(harga - j["tp"]) <= abs(harga - j["sl"]) else "SL"
                 if harga is not None and min(abs(harga - j["tp"]), abs(harga - j["sl"])) > 1.0:
                     hasil = "DITUTUP: manual atau kill switch"
-                risiko_usd = (j.get("ekuitas_awal") or self.akun.equity) * j["risiko"]
+                risiko_usd = j.get("risiko_usd") or lot_untuk(self.mt5.symbol_info(self.nama), j["entry"], j["sl"], 0, 0)[1][
+                    "pip_value"] * abs(j["entry"] - j["sl"]) / PIP * (j["lot"] or 0)
                 r = round(pl / risiko_usd, 2) if risiko_usd else None
                 self._baris(j, status=hasil, pl=r2(pl), r=r, ditutup=dt.datetime.fromtimestamp(
                     keluar[-1].time if keluar else now, dt.timezone.utc).isoformat())
                 h["pl"] += pl
                 if hasil == "SL":
                     h["sl"] += 1
-                self.cetak(f"BOT {hasil.split(':')[0]} {j['side'].upper()} {j['entry']}: P/L {pl:+.2f} {self.akun.currency} ({r:+.2f}R)")
+                self.cetak(f"BOT {hasil.split(':')[0]} {j['side'].upper()} {j['entry']}: P/L {pl:+.2f} {self.akun.currency} "
+                           f"({'-' if r is None else f'{r:+.2f}'}R)")
 
     def boleh_order(self, now, spread_now, spread_med):
         h = self._harian(now)
@@ -255,9 +263,11 @@ class Bot:
         if not izin:
             return self.lewati(s, alasan)
         sym = self.mt5.symbol_info(self.nama)
-        lot = lot_untuk(sym, s["entry"], s["sl"], self.akun.equity, self.cfg["risiko"])
+        saldo = self.akun.balance
+        lot, rc = lot_untuk(sym, s["entry"], s["sl"], saldo, self.cfg["risiko"])
         if lot is None:
-            return self.lewati(s, f"lot minimum {sym.volume_min} melebihi risiko {self.cfg['risiko'] * 100:.1f}%")
+            return self.lewati(s, f"SL {rc['sl_pips']} pips: lot minimum {sym.volume_min} rugi lebih dari "
+                                  f"{rc['risk_amount']} ({self.cfg['risiko'] * 100:.0f}% saldo)")
         tick = self.mt5.symbol_info_tick(self.nama)
         if lewat_batal(s, tick.bid, tick.ask):
             return self.lewati(s, "harga sudah 70% ke TP1")
@@ -269,10 +279,12 @@ class Bot:
             self.cetak(f"BOT ERROR order {s['id']}: {getattr(r, 'comment', self.mt5.last_error())}")
             self.st["lewati"].append(s["id"])
             return
-        self._baris(s, order_ticket=r.order, lot=lot)
+        self._baris(s, order_ticket=r.order, lot=lot, risiko_usd=rc["rugi_di_sl"])
         self.cetak(f"BOT ORDER {s['side'].upper()} LIMIT {lot} lot @ {s['entry']} | SL {s['sl']} | TP {s['tp'][0]} | "
                    f"{info['nama']} {'VALID' if info['valid'] else 'uji coba'} | akun "
-                   f"{'demo' if self.akun.trade_mode == 0 else 'REAL'} | risiko {self.cfg['risiko'] * 100:.1f}%")
+                   f"{'demo' if self.akun.trade_mode == 0 else 'REAL'} | lot {lot} = {rc['risk_amount']:.2f} / "
+                   f"({rc['sl_pips']} pips x {rc['pip_value']:.2f}) | rugi di SL {rc['rugi_di_sl']:.2f} {self.akun.currency} "
+                   f"({self.cfg['risiko'] * 100:.0f}% saldo {saldo:,.2f})")
 
     def lewati(self, s, alasan):
         if s["id"] not in self.st["lewati"]:
@@ -409,8 +421,9 @@ def main(args):
         ukur, cocok = mt5_link.cek_offset(nama)
         print(f"jam server: {'aturan GMT+' + str(mt5_link.offset_server(time.time()) // 3600)}"
               f"{'' if ukur is None else f', terukur GMT+{ukur}'}{'' if cocok else '  <-- TIDAK COCOK, cek offset_server'}")
-        print(f"akun {mt5_link.JENIS.get(akun.trade_mode)} {akun.server}, ekuitas {akun.equity} {akun.currency}, "
-              f"mode bot {cfg['mode']}, risiko {cfg['risiko'] * 100:.1f}%/trade, simbol {nama} spread {s.spread}, "
+        print(f"akun {mt5_link.JENIS.get(akun.trade_mode)} {akun.server}, saldo {akun.balance} {akun.currency}, "
+              f"ekuitas {akun.equity}, mode bot {cfg['mode']}, risiko {cfg['risiko'] * 100:.0f}% saldo = "
+              f"{akun.balance * cfg['risiko']:,.2f} {akun.currency}/trade, simbol {nama} spread {s.spread}, "
               f"algo trading {'ON' if mt5.terminal_info().trade_allowed else 'OFF'}")
         for k, v in cek.items():
             print(f"  [{'LULUS' if v else 'BELUM'}] {k}")
@@ -431,7 +444,8 @@ def main(args):
         return
     if os.path.exists(STOP_FILE):
         sys.exit(f"Kill switch aktif ({STOP_FILE}). Hapus file itu untuk menjalankan bot lagi.")
-    print(f"BOT MULAI akun {mt5_link.JENIS.get(akun.trade_mode)} {akun.server}, simbol {nama}, risiko {cfg['risiko'] * 100:.1f}%", flush=True)
+    print(f"BOT MULAI akun {mt5_link.JENIS.get(akun.trade_mode)} {akun.server}, simbol {nama}, risiko {cfg['risiko'] * 100:.0f}% "
+          f"saldo = {akun.balance * cfg['risiko']:,.2f} {akun.currency}/trade (lot dinamis dari lebar SL)", flush=True)
     gagal, news, news_t = None, [], 0
     while True:
         now = int(time.time())
@@ -463,10 +477,13 @@ def _selftest():
     from types import SimpleNamespace as N
     P = mt5_link.Palsu
     sym = P().sym
-    # lot: SL $3.00 = 300 tick x $1 = $300/lot; 2% dari 10k = $200 -> 0.66 lot; 5% -> 1.66
-    assert lot_untuk(sym, 4119.5, 4122.5, 10_000, 0.02) == 0.66 and lot_untuk(sym, 4119.5, 4122.5, 10_000, 0.05) == 1.66
-    assert lot_untuk(sym, 4119.5, 4122.5, 100, 0.01) is None                       # lot min > risiko
-    assert konfig({"BOT_RISK": "0.25"})["risiko"] == RISIKO_MAKS and konfig({})["mode"] == "demo"
+    # contoh user: saldo $100, 25% = $25; SL 50 pips -> 0.05 lot; SL 100 pips -> 0.025 -> 0.02; 30% & 50 pips -> 0.06
+    lot, rc = lot_untuk(sym, 4100.0, 4105.0, 100, 0.25)
+    assert lot == 0.05 and rc == {"risk_amount": 25.0, "sl_pips": 50.0, "pip_value": 10.0, "rugi_di_sl": 25.0}, rc
+    assert lot_untuk(sym, 4100.0, 4090.0, 100, 0.25)[0] == 0.02 and lot_untuk(sym, 4100.0, 4105.0, 100, 0.30)[0] == 0.06
+    assert lot_untuk(sym, 4100.0, 4140.0, 100, 0.25)[0] is None                     # SL 400 pips: lot min > $25
+    assert [konfig({"BOT_RISK_PERCENTAGE": v})["risiko"] for v in ("10", "60", "abc", "27")] == [0.25, 0.30, 0.25, 0.27]
+    assert konfig({})["risiko"] == 0.25 and konfig({})["mode"] == "demo"
     real, demo = N(trade_mode=2), N(trade_mode=0)
     assert izin_akun(demo, konfig({}), False, False)[0]
     assert not izin_akun(real, konfig({"BOT_MODE": "live"}), False, True)[0]
@@ -483,13 +500,15 @@ def _selftest():
     # alur: order terpasang lalu dibatalkan karena harga 70% ke TP
     keluar = []
     st = {"jurnal": {}, "lewati": [], "harian": {}}
-    bot = Bot(m, konfig({"BOT_RISK": "0.02"}), st, cetak=keluar.append)
+    m.akun.balance = 100.0   # $25 / (30 pips x $10) = 0.083 -> 0.08 lot
+    bot = Bot(m, konfig({}), st, cetak=keluar.append)
     bot.nama = "XAUUSD"
     m.symbol_info_tick = lambda n: N(bid=4115.0, ask=4115.2)
     info = {"valid": False, "nama": "Sniper 1m"}
     now = 1500
     bot.putaran(now, [(dict(s), 3600, info)], [], 20, 0.5)
-    assert any(x.startswith("BOT ORDER SELL LIMIT 0.66") for x in keluar), keluar
+    assert any(x.startswith("BOT ORDER SELL LIMIT 0.08") and "rugi di SL 24.00" in x for x in keluar), keluar
+    assert st["jurnal"][s["id"]]["risiko_usd"] == 24.0 and "risiko_usd" not in bot.ubah[-1]
     assert st["jurnal"][s["id"]]["status"] == "PENDING" and len(m.order) == 1
     m.symbol_info_tick = lambda n: N(bid=4112.0, ask=4112.2)
     bot.putaran(now + 60, [], [], 20, 0.5)
