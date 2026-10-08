@@ -22,6 +22,8 @@ input double Disp         = 1.5;         // Body displacement >= Disp x ATR M15
 input int    Cari_OB      = 3;
 input double Zona_Max     = 10.0;        // Lebar OB maksimum ($)
 input int    Min_Skor     = 2;
+input ENUM_TIMEFRAMES POI_TF = PERIOD_M15; // TF zona POI (M5 = lebih sering entry)
+input bool   Pakai_Bias   = true;        // POI harus searah EMA20/50 H1+M30
 input int    Umur_Jam     = 12;          // Umur POI
 input int    LB           = 3;           // Candle M1 sebelum ekstrem untuk garis CHoCH
 input double Pad          = 0.5;         // SL = ekstrem sweep -/+ Pad ($)
@@ -209,8 +211,8 @@ void ProsesM15(const MqlRates &r[], int idx, const double &a[], bool cari_poi)
    int side = r[i].close > r[i].open ? 1 : -1;
    double gap = side > 0 ? r[i + 1].low - r[i - 1].high : r[i - 1].low - r[i + 1].high;
    if(gap <= 0) return;
-   datetime T = r[i + 1].time + 900;
-   if(Bias(T) != side) return;
+   datetime T = r[i + 1].time + PeriodSeconds(POI_TF);
+   if(Pakai_Bias && Bias(T) != side) return;
    int k = -1;
    for(int x = i - 1; x >= MathMax(0, i - Cari_OB); x--)
       if((r[x].close < r[x].open) == (side > 0) && r[x].close != r[x].open) { k = x; break; }
@@ -246,7 +248,7 @@ void M15Baru(bool warmup)
 {
    MqlRates r[];
    ArraySetAsSeries(r, false);
-   int n = CopyRates(_Symbol, PERIOD_M15, 1, warmup ? 1500 : 300, r);
+   int n = CopyRates(_Symbol, POI_TF, 1, warmup ? 1500 : 300, r);
    if(n < 40) return;
    double a[];
    AtrWilder(r, 14, a);
@@ -406,7 +408,7 @@ void Pasang(const Poi &z, double ujung, datetime tsig)
                       : trade.SellLimit(lot, entry, _Symbol, sl, tp, ORDER_TIME_GTC, 0, "sniper");
       if(ok)
       {
-         string poi = StringFormat("POI M15 %.2f-%.2f: %s, sweep %.2f lalu CHoCH M1", z.lo, z.hi, z.alasan, ujung);
+         string poi = StringFormat("POI %s %.2f-%.2f: %s, sweep %.2f lalu CHoCH M1", StringSubstr(EnumToString(POI_TF), 7), z.lo, z.hi, z.alasan, ujung);
          Log(StringFormat("BOT ORDER %s LIMIT %.2f lot @ %.2f | SL %.2f | TP %.2f | lot = %.2f / (%.1f pips x %.2f) | rugi di SL %.2f (%.0f%% saldo) | %s",
                           arah, lot, entry, sl, tp, ra, pips, pv, lot * pips * pv, RiskFrac() * 100, poi));
          Catat("SINYAL", KeUtc(tsig), 0, s > 0, entry, sl, tp, lot, "", "", "ORDER", poi);
@@ -576,7 +578,7 @@ int OnInit()
    if(hE20H1 == INVALID_HANDLE || hE50H1 == INVALID_HANDLE || hE20M30 == INVALID_HANDLE || hE50M30 == INVALID_HANDLE)
       return INIT_FAILED;
    MuatNews();
-   if(tester)
+   if(tester && !MQLInfoInteger(MQL_OPTIMIZATION))
    {
       fcsv = FileOpen("SniperBot_tester.csv", FILE_WRITE | FILE_CSV | FILE_ANSI | FILE_COMMON, ',');
       if(fcsv == INVALID_HANDLE) Print("Peringatan: SniperBot_tester.csv gagal dibuka: ", GetLastError());
@@ -610,7 +612,7 @@ void OnTick()
    if(t1 == 0 || t1 == last_m1) return;
    bool awal = last_m1 == 0;
    last_m1 = t1;
-   datetime t15 = iTime(_Symbol, PERIOD_M15, 0);
+   datetime t15 = iTime(_Symbol, POI_TF, 0);
    if(t15 != last_m15)
    {
       M15Baru(awal);
