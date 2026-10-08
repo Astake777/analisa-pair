@@ -206,8 +206,18 @@ def order_limit(mt5, nama, cfg, b):
             raise ValueError("lot harus angka")
         if not sym.volume_min <= lot <= sym.volume_max:
             raise ValueError(f"lot harus {sym.volume_min}..{sym.volume_max}")
+    # limit yang marginnya tidak cukup ditolak broker saat terisi; lot otomatis dikecilkan, lot manual ditolak
+    jenis = mt5.ORDER_TYPE_BUY_LIMIT if side == "buy" else mt5.ORDER_TYPE_SELL_LIMIT
+    per_lot = mt5.order_calc_margin(mt5.ORDER_TYPE_BUY if side == "buy" else mt5.ORDER_TYPE_SELL, nama, 1.0, entry) \
+        if hasattr(mt5, "order_calc_margin") else None
+    bebas = getattr(akun, "margin_free", None)
+    if per_lot and bebas is not None and lot * per_lot > bebas * 0.95:
+        muat = round(math.floor(bebas * 0.95 / per_lot / sym.volume_step + 1e-9) * sym.volume_step, 2)
+        if b.get("lot") is not None or muat < sym.volume_min:
+            raise ValueError(f"margin kurang: {lot} lot butuh ${lot * per_lot:.2f}, margin bebas ${bebas:.2f} (maks {muat} lot)")
+        lot = muat
     req = {"action": mt5.TRADE_ACTION_PENDING, "symbol": nama, "volume": lot, "price": entry, "sl": sl, "tp": tp,
-           "type": mt5.ORDER_TYPE_BUY_LIMIT if side == "buy" else mt5.ORDER_TYPE_SELL_LIMIT,
+           "type": jenis,
            "deviation": 20, "magic": MAGIC_WEB, "comment": "web",
            "type_time": mt5.ORDER_TIME_GTC, "type_filling": mt5.ORDER_FILLING_RETURN}
     ok, pesan, r = _kirim(mt5, req, "order terpasang")
@@ -572,6 +582,18 @@ def _selftest():
         assert r == {"ok": True, "pesan": "order terpasang", "tiket": 1, "lot": 5.0, "rugi_di_sl": 2500.0}, r
         r = order_limit(m, "XAUUSD", demo, {"side": "sell", "entry": 4105, "sl": 4110, "tp": 4090, "lot": 0.237})
         assert m.kirim[-1]["type"] == m.ORDER_TYPE_SELL_LIMIT and r["lot"] == 0.23 and r["rugi_di_sl"] == 115.0, r
+        # margin: $825/lot, margin bebas $120 -> lot otomatis dikecilkan ke 0.13, lot manual 0.15 ditolak
+        kecil = mt5_link.Palsu()
+        kecil.ORDER_TIME_GTC, kecil.ORDER_TYPE_BUY, kecil.ORDER_TYPE_SELL = 0, 0, 1
+        kecil.akun.balance = kecil.akun.margin_free = 120.0
+        kecil.order_calc_margin = lambda t, s, v, p: 825.0 * v
+        r = order_limit(kecil, "XAUUSD", demo, {"side": "buy", "entry": 4099, "sl": 4097, "tp": 4109})
+        assert r["lot"] == 0.13, r
+        try:
+            order_limit(kecil, "XAUUSD", demo, {"side": "buy", "entry": 4099, "sl": 4097, "tp": 4109, "lot": 0.15})
+            raise AssertionError("lot manual tanpa margin harus ditolak")
+        except ValueError as x:
+            assert "margin kurang" in str(x), x
         real = mt5_link.Palsu(trade_mode=2)
         real.ORDER_TIME_GTC = 0
         try:
