@@ -93,6 +93,11 @@ Untuk analisis berkala: `/loop 30m /analisa-pair XAUUSD intraday`. Harga di webs
 - Panel Hasil backtest: setelah `validasi.py`/`backtest.py`, jalankan `python kinerja.py` (menulis `web/public/kinerja.json`, hanya trade OOS).
 - Kalau watcher melaporkan error SSL/DNS ke Binance: jaringan memblokir exchange crypto (biasa terjadi di data seluler). Minta user pindah ke WiFi atau menyalakan VPN/WARP; jangan menebak harga dari sumber lain.
 
+### Bot MT5 (eksekusi otomatis)
+- `python .claude/skills/analisa-pair/mt5_link.py` cek koneksi; `bot_mt5.py --status` (akun, risiko, syarat live), `--uji-order` (demo saja), `--stop` (kill switch), tanpa argumen = loop. Jalankan loop lewat `Monitor` dan teruskan baris `BOT ORDER/TERISI/TP/SL/DITUTUP/STOP/ERROR` ke HP dengan `PushNotification`.
+- Akun real hanya kalau `BOT_MODE=live`, strategi lulus `validasi.py <strategi> --sumber mt5`, dan syarat real test demo lulus. Jangan pernah mengubah `BOT_MODE`, `BOT_RISK`, atau kredensial MT5 atas inisiatif sendiri; itu keputusan user. Jangan hapus `data/BOT_STOP` kecuali user minta.
+- Risiko per trade dari `BOT_RISK` (maks 10%); sebutkan drawdown di risiko itu (panel Hasil backtest memakai angka yang sama).
+
 ### Validasi sebelum mengabarkan setup
 - `python .claude/skills/analisa-pair/validasi.py <strategi>`: walk-forward 90 hari IS / 30 hari OOS di data 200 hari, fill harus tembus $0.10, order batal kalau harga sudah 70% ke TP1 tanpa entry, biaya 2x, parameter tetangga. Label **SETUP VALID** hanya kalau semua syarat `KRITERIA` lulus.
 - Hasil 8 Okt 2026: `sniper` (POI 15m + level MSNR fresh + sweep/CHoCH 1m) OOS 18 trade, menang 44%, +0.79R, lolos 6/7 (kurang jumlah trade) → dikabarkan sebagai uji coba. `alchemist_crt` OOS −0.41R dan `alchemist_london` hampir tidak pernah terisi → **tidak dikabarkan**. Jalankan ulang validasi tiap minggu atau setelah aturan strategi berubah.

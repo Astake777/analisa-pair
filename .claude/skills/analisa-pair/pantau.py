@@ -70,9 +70,10 @@ def lacak(s, m1, now, expire_s):
     return isi is not None, None
 
 
-def info_validasi(nama):
-    """Laporan validasi.py terbaru -> {valid, teks}."""
-    files = sorted(f for f in glob.glob(os.path.join(ROOT, "data", "backtest", "validasi", f"{nama}_*.json"))
+def info_validasi(nama, sumber=""):
+    """Laporan validasi.py terbaru (sumber "" = Binance, "mt5" = data broker) -> {valid, layak, teks}."""
+    label = f"{nama}-{sumber}" if sumber else nama
+    files = sorted(f for f in glob.glob(os.path.join(ROOT, "data", "backtest", "validasi", f"{label}_*.json"))
                    if not f.endswith("_trades.json"))
     if not files:
         return {"valid": False, "layak": False, "teks": "Belum divalidasi."}

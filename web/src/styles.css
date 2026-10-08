@@ -309,3 +309,10 @@ tr.det > td { padding: 4px 0 12px; }
 .kin dd { margin: 2px 0 0; font-size: 18px; font-weight: 700; }
 .kin dd.up { color: var(--up); } .kin dd.down { color: var(--down); }
 .kin-note { margin: 12px 0 0; font-size: 12px; }
+.bot-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.bot-akun { font-size: 12px; font-weight: 800; padding: 2px 8px; border-radius: var(--r-sm); background: var(--raised); color: var(--ink); }
+.bot-akun.real { background: var(--down-label); color: #ffffff; }
+.bot-open { font-size: 13px; }
+.bot-open .up { color: var(--up); } .bot-open .down { color: var(--down); }
+.cek { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; font-size: 12px; }
+.cek .up { color: var(--up); }

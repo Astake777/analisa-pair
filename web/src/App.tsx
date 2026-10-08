@@ -4,12 +4,13 @@ import type { Band } from './chart/zones'
 import { TFS, useLiveFeed, type TF } from './feed'
 import { useLiveDrivers } from './feed/yahoo'
 import { age, fmt, marketOpen, signed, statusKind, store, wibTime } from './lib/format'
-import { FIXTURE, useAnalyses, useSetupLog, useBacktest, useMacro, useNewsOutlook, type Mode } from './lib/supabase'
+import { FIXTURE, useAnalyses, useBot, useSetupLog, useBacktest, useMacro, useNewsOutlook, type Mode } from './lib/supabase'
 import { Amd, Bias, Calendar, Headlines, History, Levels, Notes, PrediksiNews, Strategi } from './panels/Analysis'
 import { ASET, Drivers, Makro } from './panels/Drivers'
 import { Menjelang, Outlook } from './panels/Outlook'
 import { RekamJejak, Setups } from './panels/Setups'
 import { Kinerja } from './panels/Kinerja'
+import { Bot } from './panels/Bot'
 
 const PAIR = 'XAUUSD'
 const MODES: Mode[] = ['scalp', 'intraday', 'swing']
@@ -71,6 +72,7 @@ export default function App() {
   const news = useNewsOutlook(PAIR)
   const macro = useMacro()
   const log = useSetupLog(PAIR)
+  const bot = useBot()
   const drv = useLiveDrivers(ASET)
 
   const [izin, setIzin] = useState(() => (hasNotif ? Notification.permission : 'denied'))
@@ -270,6 +272,7 @@ export default function App() {
               <Setups setups={a.setups ?? []} idx={idx} onPick={(i) => setPick({ key: akey, idx: i })} off={off} price={feed.last} log={log.rows} />
             )}
           </section>
+          <Bot status={bot.status} trades={bot.trades} />
           <RekamJejak rows={log.rows} error={log.error} />
           <Kinerja />
           {a?.amd && <Amd amd={a.amd} off={off} />}

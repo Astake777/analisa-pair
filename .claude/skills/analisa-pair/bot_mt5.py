@@ -321,7 +321,9 @@ def sinyal_sekarang(by, now, seen_fn):
     out = []
     for nama in pantau.STRATEGI:
         mod = importlib.import_module(f"strategi.{nama}")
-        info = {**pantau.info_validasi(nama), "nama": pantau.NAMA.get(nama, nama)}
+        # live butuh lulus validasi di data broker; demo cukup layak di salah satu sumber
+        broker, umum = pantau.info_validasi(nama, "mt5"), pantau.info_validasi(nama)
+        info = {"valid": broker["valid"], "layak": broker["layak"] or umum["layak"], "nama": pantau.NAMA.get(nama, nama)}
         if not info["layak"]:
             continue
         p = dict(mod.PARAMS)

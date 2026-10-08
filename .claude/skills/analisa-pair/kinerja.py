@@ -1,6 +1,6 @@
 """Kinerja backtest untuk panel website: equity curve dan metrik dari trade OUT-OF-SAMPLE saja.
 
-Asumsi akun: modal MODAL dollar, risiko RISIKO dari ekuitas per trade, majemuk; R bersih biaya.
+Asumsi akun: modal MODAL dollar, risiko per trade = BOT_RISK di .env (bawaan 5%), majemuk; R bersih biaya.
 Sumber: sniper = trade OOS walk-forward terbaru validasi.py; scalp/intraday = sample OOS tren_pullback backtest.py terbaru.
 Pakai:  python kinerja.py            menulis web/public/kinerja.json
 Self-check: python kinerja.py --selftest
@@ -97,8 +97,12 @@ def _selftest():
 
 def main():
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    global RISIKO
+    import bot_mt5
+    import data
+    RISIKO = bot_mt5.konfig(data.env())["risiko"]   # sama dengan risiko bot (BOT_RISK)
     out = {"dibuat": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-           "asumsi": f"Modal ${MODAL:,.0f}, risiko {RISIKO * 100:.0f}% ekuitas per trade, majemuk, biaya spread+slip dihitung. "
+           "asumsi": f"Modal ${MODAL:,.0f}, risiko {RISIKO * 100:.1f}% ekuitas per trade (BOT_RISK), majemuk, biaya spread+slip dihitung. "
                      "Hanya trade out-of-sample.",
            "strategi": [x for x in (sniper(), tren_pullback("scalp"), tren_pullback("intraday")) if x]}
     os.makedirs(os.path.dirname(OUT), exist_ok=True)

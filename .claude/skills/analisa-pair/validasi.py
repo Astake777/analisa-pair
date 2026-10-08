@@ -1,6 +1,7 @@
 """Validasi strategi sniper sebelum setupnya boleh dikabarkan sebagai SETUP VALID.
 
-Pakai:  python validasi.py <strategi> [scalp]        contoh: python validasi.py alchemist_crt
+Pakai:  python validasi.py <strategi> [scalp] [--sumber binance|mt5]   contoh: python validasi.py sniper --sumber mt5
+  --sumber mt5: candle broker, biaya = spread broker + slip, sniper tanpa delta; laporan <strategi>-mt5_<waktu>.json
 Alur:
   1. Semua kombinasi GRID modul disimulasikan sekali di TF `SIM` modul (1m) atas seluruh data Binance.
      Limit terisi hanya kalau harga tembus entry >= TEMBUS; batal kalau harga sudah 70% ke TP1 tanpa entry;
@@ -56,8 +57,8 @@ def pilih(hasil, a, b):
     return idx
 
 
-def biaya2(tr):
-    return [{**x, "r_net": x["r"] - 2 * COST / abs(x["entry"] - x["sl"])} for x in tr]
+def biaya2(tr, cost=COST):
+    return [{**x, "r_net": x["r"] - 2 * cost / abs(x["entry"] - x["sl"])} for x in tr]
 
 
 def tetangga(grid, kombi):
@@ -71,7 +72,7 @@ def tetangga(grid, kombi):
     return out
 
 
-def nilai(hasil, grid, folds):
+def nilai(hasil, grid, folds, cost=COST):
     oos, info = [], []
     for a, b, c in folds:
         i = pilih(hasil, a, b)
@@ -86,7 +87,7 @@ def nilai(hasil, grid, folds):
     best = max(layak, key=lambda x: x[1]["expectancy"])[0] if layak else None
     peta = {json.dumps(k, sort_keys=True): m for k, m in full}
     teta = [peta[json.dumps(n, sort_keys=True)] for n in tetangga(grid, best)] if best and grid else []
-    m, m2 = metrik(oos), metrik(biaya2(oos))
+    m, m2 = metrik(oos), metrik(biaya2(oos, cost))
     dinilai = [f for f in info if f["oos"]["trades"]]
     porsi = sum(f["oos"]["expectancy"] > 0 for f in dinilai) / len(dinilai) if dinilai else 0
     cek = {
@@ -112,17 +113,18 @@ def rincian(tr):
     return {"bulan": f(bulan), "sesi": f(ses), "hari": f(hari)}
 
 
-def validasi(by, nama, mode="scalp"):
+def validasi(by, nama, mode="scalp", cost=COST, tetap=None):
+    """tetap: parameter yang dipaksa (mis. delta=False untuk candle broker tanpa sisi agresor)."""
     mod = importlib.import_module(f"strategi.{nama}")
     stf = getattr(mod, "SIM", "5m")
     exp = getattr(mod, "EXPIRE_S", 3600) // STEP[stf]
     hasil = []
     for k in kombinasi(mod):
-        sig = mod.signals(by, mode, {**mod.PARAMS, **k})
-        hasil.append((k, simulasi(by[stf], sig, STEP[stf], exp, tembus=TEMBUS, batal_frac=BATAL_FRAC)))
+        sig = mod.signals(by, mode, {**mod.PARAMS, **k, **(tetap or {})})
+        hasil.append((k, simulasi(by[stf], sig, STEP[stf], exp, cost=cost, tembus=TEMBUS, batal_frac=BATAL_FRAC)))
         print(f"  {k}: {len(sig)} sinyal, {len(hasil[-1][1])} terisi", flush=True)
     t0, t1 = by[stf][0][0], by[stf][-1][0]
-    rep = nilai(hasil, getattr(mod, "GRID", {}), lipatan(t0, t1))
+    rep = nilai(hasil, getattr(mod, "GRID", {}), lipatan(t0, t1), cost)
     rep["rincian"] = rincian(rep["trades"])
     rep["floating_menang"] = sorted(x["floating"] for x in rep["trades"] if x["r_net"] > 0)
     rep.update(strategi=nama, mode=mode, data=[t0, t1])
@@ -166,14 +168,24 @@ def _selftest():
     print("selftest OK")
 
 
-def main(nama, mode="scalp"):
+def main(nama, mode="scalp", sumber="binance"):
     import data
     from regime import TFS
-    by = data.bersih(data.load("XAUUSD", TFS + ["1m"], source="binance", spot=False))
-    rep = validasi(by, nama, mode)
+    cost, tetap, label = COST, None, nama
+    if sumber == "mt5":
+        import mt5_link
+        mt5_link.sambung()
+        s = mt5_link.modul().symbol_info(mt5_link.simbol_emas())
+        cost = s.spread * s.point + 0.10       # spread broker sekarang + slip
+        tetap = {"delta": False} if nama == "sniper" else None
+        label = f"{nama}-mt5"
+        print(f"data broker MT5 {s.name}, biaya per trade {cost:.2f} (spread {s.spread} poin + slip 0.10)")
+    by = data.bersih(data.load("XAUUSD", TFS + ["1m"], source=sumber, spot=False))
+    rep = validasi(by, nama, mode, cost, tetap)
+    rep["strategi"], rep["sumber"] = label, sumber
     cetak(rep)
     os.makedirs(OUT, exist_ok=True)
-    path = os.path.join(OUT, f"{nama}_{dt.datetime.now(dt.timezone.utc):%Y%m%dT%H%M}.json")
+    path = os.path.join(OUT, f"{label}_{dt.datetime.now(dt.timezone.utc):%Y%m%dT%H%M}.json")
     json.dump({k: v for k, v in rep.items() if k != "trades"}, open(path, "w", encoding="utf-8"), indent=1)
     json.dump(rep["trades"], open(path.replace(".json", "_trades.json"), "w", encoding="utf-8"))
     print(path)
@@ -183,4 +195,7 @@ if __name__ == "__main__":
     if sys.argv[1:] == ["--selftest"]:
         _selftest()
     else:
-        main(*sys.argv[1:])
+        a = sys.argv[1:]
+        src = a[a.index("--sumber") + 1] if "--sumber" in a else "binance"
+        pos = [x for i, x in enumerate(a) if not x.startswith("--") and (i == 0 or a[i - 1] != "--sumber")]
+        main(*pos[:2], sumber=src)

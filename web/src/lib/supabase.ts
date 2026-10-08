@@ -177,3 +177,21 @@ export function useSetupLog(pair: string) {
     `pair=eq.${pair}`,
   )
 }
+
+export type BotStatus = {
+  login: number; akun: string; server: string; simbol: string | null; mode: string; risiko: number
+  ekuitas: number | null; saldo: number | null; pl_hari_ini: number | null; sl_hari_ini: number; entry_hari_ini: number
+  terbuka: { id: string; side: Side; lot: number; entry: number; sl: number; tp: number; status: string }[] | null
+  pengaman: { news?: boolean; boleh_order?: boolean; alasan?: string; spread?: number; spread_median?: number } | null
+  syarat_live: Record<string, boolean> | null; updated_at: string
+}
+export type BotTrade = {
+  id: string; akun: string; strategi: string; side: Side; lot: number; entry: number; harga_isi: number | null
+  sl: number; tp: number; dibuat: string; status: string; pl: number | null; r: number | null
+}
+
+export function useBot() {
+  const status = useRows<BotStatus>('bot:status', sb && (() => q(sb.from('bot_status').select('*').order('updated_at', { ascending: false }).limit(1))), 'bot_status')
+  const trades = useRows<BotTrade>('bot:trades', sb && (() => q(sb.from('bot_trades').select('*').order('dibuat', { ascending: false }).limit(50))), 'bot_trades')
+  return { status, trades }
+}
