@@ -8,8 +8,9 @@ const MIGRASI = 'supabase/migrations/20261008020000_bot_mt5.sql'
 export function Bot({ status, trades }: { status: R<BotStatus>; trades: R<BotTrade> }) {
   const s = status.rows?.[0]
   const mati = s ? Date.now() - Date.parse(s.updated_at) > 3 * 60e3 : true
-  const selesai = (trades.rows ?? []).filter((t) => t.akun === 'demo' && (t.status === 'TP' || t.status === 'SL'))
+  const selesai = (trades.rows ?? []).filter((t) => t.akun === 'demo' && ['TP', 'SL', 'BE'].includes(t.status))
   const tp = selesai.filter((t) => t.status === 'TP').length
+  const be = selesai.filter((t) => t.status === 'BE').length
   const totalR = selesai.reduce((a, t) => a + Number(t.r ?? 0), 0)
   const pl = selesai.reduce((a, t) => a + Number(t.pl ?? 0), 0)
 
@@ -26,12 +27,13 @@ export function Bot({ status, trades }: { status: R<BotStatus>; trades: R<BotTra
       <>
         <div className="bot-top">
           <span className={`bot-akun ${s.akun === 'real' ? 'real' : ''}`}>{s.akun === 'real' ? 'AKUN REAL' : 'DEMO'}</span>
-          <span className="sub">{s.server} · {s.simbol ?? '-'} · risiko {(s.risiko * 100).toFixed(1)}%</span>
+          <span className="sub">{s.server} · {s.simbol ?? '-'} · risiko {(s.risiko * 100).toFixed(0)}% saldo · lot ikut lebar SL</span>
         </div>
         <p className={`setup-state ${mati ? 'off' : g.boleh_order ? 'go' : 'wait'}`} role="status">
           {mati ? `Bot tidak aktif (update terakhir ${age(s.updated_at)}).` : g.boleh_order ? 'Bot aktif, siap pasang order saat setup muncul.' : `Bot aktif, order baru ditahan: ${g.alasan}.`}
         </p>
         <dl className="kv">
+          <dt>Saldo</dt><dd className="num wide">{fmt(s.saldo, 2)}</dd>
           <dt>Ekuitas</dt><dd className="num wide">{fmt(s.ekuitas, 2)}</dd>
           <dt>P/L hari ini</dt><dd className={`num wide ${(s.pl_hari_ini ?? 0) >= 0 ? 'up' : 'down'}`}>{fmt(s.pl_hari_ini, 2)}</dd>
           <dt>SL / entry hari ini</dt><dd className="num wide">{s.sl_hari_ini}/2 SL · {s.entry_hari_ini}/3 entry</dd>
@@ -40,7 +42,7 @@ export function Bot({ status, trades }: { status: R<BotStatus>; trades: R<BotTra
         {(s.terbuka ?? []).map((o) => (
           <p key={o.id} className="bot-open"><b className={o.side === 'sell' ? 'down' : 'up'}>{o.side.toUpperCase()}</b> {o.lot} lot @ {fmt(o.entry, 2)} · SL {fmt(o.sl, 2)} · TP {fmt(o.tp, 2)} · {o.status === 'PENDING' ? 'menunggu terisi' : 'posisi terbuka'}</p>
         ))}
-        <p className="exp-tag">Real test demo: {selesai.length} trade selesai, {tp} TP, {totalR >= 0 ? '+' : ''}{totalR.toFixed(1)}R, P/L {fmt(pl, 2)}.</p>
+        <p className="exp-tag">Real test demo: {selesai.length} trade selesai, {tp} TP, {be} BE, {totalR >= 0 ? '+' : ''}{totalR.toFixed(1)}R, P/L {fmt(pl, 2)}.</p>
         {s.syarat_live && (
           <ul className="cek">
             {Object.entries(s.syarat_live).map(([k, v]) => <li key={k} className={v ? 'up' : 'sub'}>{v ? 'Lulus' : 'Belum'}: {k}</li>)}
