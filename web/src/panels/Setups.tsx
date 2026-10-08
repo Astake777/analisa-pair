@@ -1,4 +1,5 @@
 import type { LogRow, Setup } from '../lib/supabase'
+import type { Jejak, Nasib } from '../lib/nasib'
 import { fmt, wibTime } from '../lib/format'
 
 // Near = live price within 0.5 x (zone height + $6) of the zone midpoint, i.e. inside or within $3 of an edge.
@@ -15,7 +16,8 @@ const SUMBER: Record<string, string> = {
 const BATAL_FRAC = 0.7
 
 // Posisi harga live terhadap zona, dalam kalimat biasa.
-function keadaan(s: Setup, price: number | null, off: number) {
+function keadaan(s: Setup, price: number | null, off: number, n?: Nasib) {
+  if (n?.status === 'berjalan') return { text: `Order terisi${n.t ? ` pukul ${wibTime(new Date(n.t * 1000).toISOString(), false)}` : ''}. Posisi berjalan, kelola dengan SL dan target di bawah.`, kind: 'go' }
   if (price == null) return { text: 'Menunggu harga live.', kind: 'wait' }
   const [lo, hi] = (s.zone ?? [s.entry, s.entry]).map((v) => v + off)
   const sl = s.sl + off
@@ -35,7 +37,7 @@ function keadaan(s: Setup, price: number | null, off: number) {
   return { text: 'Harga sudah lewat zona, belum kena stop loss. Jangan kejar.', kind: 'wait' }
 }
 
-type Props = { setups: Setup[]; idx: number; onPick: (i: number) => void; off: number; price: number | null; log: LogRow[] | null }
+type Props = { aktif: Jejak[]; riwayat: Jejak[]; idx: number; onPick: (i: number) => void; off: number; price: number | null; log: LogRow[] | null }
 
 // Ringkasan forward test nyata satu strategi dari setup_log.
 function live(log: LogRow[] | null, strategi?: string) {
@@ -46,14 +48,17 @@ function live(log: LogRow[] | null, strategi?: string) {
   return `Live: ${done.length} setup selesai, ${tp} kena TP, total ${r >= 0 ? '+' : ''}${r.toFixed(1)}R.`
 }
 
-export function Setups({ setups, idx, onPick, off, price, log }: Props) {
-  if (!setups.length) return <p className="sub">Belum ada setup. Sistem mengabari begitu zona yang memenuhi syarat muncul.</p>
+export function Setups({ aktif, riwayat, idx, onPick, off, price, log }: Props) {
+  const setups = aktif.map((j) => j.s)
   return (
     <>
+      {!setups.length && (
+        <p className="sub">{riwayat.length ? 'Belum ada setup aktif. Setup sebelumnya ada di riwayat di bawah.' : 'Belum ada setup. Sistem mengabari begitu zona yang memenuhi syarat muncul.'}</p>
+      )}
       {setups.map((s, i) => {
         const shown = i === idx
         const sell = s.side === 'sell'
-        const k = keadaan(s, price, off)
+        const k = keadaan(s, price, off, aktif[i].n)
         return (
           <article key={i} className={`setup${shown ? ' on' : ''}${k.kind === 'go' ? ' near' : ''}`}>
             <div className="setup-top">
@@ -87,7 +92,34 @@ export function Setups({ setups, idx, onPick, off, price, log }: Props) {
           </article>
         )
       })}
+      {riwayat.length > 0 && <Riwayat rows={riwayat} off={off} />}
     </>
+  )
+}
+
+const STATUS: Record<string, [string, string]> = {
+  TP1: ['TP1', 'up'], SL: ['Kena SL', 'down'], invalid: ['Invalid', 'sub'], batal: ['Batal', 'sub'], kedaluwarsa: ['Kedaluwarsa', 'sub'],
+}
+
+// Setup yang sudah selesai atau gugur, terbaru di atas.
+function Riwayat({ rows, off }: { rows: Jejak[]; off: number }) {
+  return (
+    <div className="riwayat">
+      <h3>Riwayat setup</h3>
+      <ul className="log">
+        {rows.map((j) => {
+          const [label, tone] = STATUS[j.n.status] ?? [j.n.status, 'sub']
+          return (
+            <li key={`${j.s.side}${j.s.entry}${j.t0}`} title={j.n.alasan}>
+              <span className={j.s.side === 'sell' ? 'down' : 'up'}>{j.s.side.toUpperCase()}</span>
+              <span className="num">{fmt(j.s.entry + off, 2)}</span>
+              <span className="sub">{wibTime(new Date((j.n.t ?? j.t0) * 1000).toISOString())} · {SUMBER[j.s.label ?? ''] ?? j.s.label ?? 'Setup'}</span>
+              <span className={`num ${tone}`}>{label}</span>
+            </li>
+          )
+        })}
+      </ul>
+    </div>
   )
 }
 

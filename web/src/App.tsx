@@ -11,11 +11,27 @@ import { Menjelang, Outlook } from './panels/Outlook'
 import { RekamJejak, Setups } from './panels/Setups'
 import { Kinerja } from './panels/Kinerja'
 import { Bot } from './panels/Bot'
+import { nasib, SELESAI, type Jejak } from './lib/nasib'
 
 const PAIR = 'XAUUSD'
 const MODES: Mode[] = ['scalp', 'intraday', 'swing']
 const NO_LEVELS: { price: number; label: string; kind: string }[] = []
 const hasNotif = typeof Notification !== 'undefined'
+type Bar = { time: number; open: number; high: number; low: number; close: number }
+
+// Candle M5 broker ±7 hari untuk menilai jalur harga setiap setup; cadangan: candle yang sedang tampil.
+function useEvalBars(cadangan: Bar[]) {
+  const [bars, setBars] = useState<Bar[] | null>(null)
+  useEffect(() => {
+    let hidup = true
+    const ambil = () => fetch('/mt5/candles?tf=M5&n=2000').then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((b: Bar[]) => { if (hidup && b.length) setBars(b) }, () => {})
+    ambil()
+    const t = setInterval(ambil, 60000)
+    return () => { hidup = false; clearInterval(t) }
+  }, [])
+  return bars ?? cadangan
+}
 
 // Dua bunyi pendek; tanpa file audio.
 function bunyi() {
@@ -123,15 +139,39 @@ export default function App() {
   const latest = an.rows?.[0] ?? null
   const a = latest?.payload ?? null
   const akey = latest ? `${latest.id ?? ''}${latest.created_at}` : ''
-  const idx = pick.key === akey ? pick.idx : 0
-  const setup = a?.setups?.[idx] ?? null
+  const evalBars = useEvalBars(feed.bars)
+  // Setup dari 20 analisis terakhir (duplikat side+entry disatukan, waktu paling awal), dinilai dari jalur harga sejak dibuat.
+  const jejak = useMemo<Jejak[]>(() => {
+    const rows = an.rows ?? [], seen = new Map<string, Jejak>(), now = Date.now() / 1000
+    for (let r = rows.length - 1; r >= 0; r--) {
+      const t0 = Date.parse(rows[r].payload.updatedAt || rows[r].created_at) / 1000
+      for (const s of rows[r].payload.setups ?? []) {
+        const k = `${s.side}:${Math.round(s.entry * 10)}`
+        const ada = seen.get(k)
+        if (ada) { if (r === 0) Object.assign(ada, { s, terbaru: true }); continue }
+        seen.set(k, { s, t0, n: { status: 'menunggu', alasan: '', t: null }, terbaru: r === 0 })
+      }
+    }
+    return [...seen.values()].map((j) => ({ ...j, n: nasib(j.s, j.t0, evalBars, now, off) }))
+  }, [an.rows, evalBars, off])
+  const aktif = useMemo(() => jejak.filter((j) => j.terbaru && !SELESAI.has(j.n.status)), [jejak])
+  const riwayat = useMemo(() => jejak.filter((j) => SELESAI.has(j.n.status))
+    .sort((x, y) => (y.n.t ?? y.t0) - (x.n.t ?? x.t0)).slice(0, 10), [jejak])
+  const idx = pick.key === akey ? Math.min(pick.idx, Math.max(0, aktif.length - 1)) : 0
+  const setup = aktif[idx]?.s ?? null
 
+  // Zona/level milik setup yang sudah selesai atau invalid tidak digambar lagi.
+  const diZonaSelesai = useMemo(() => {
+    const zs = riwayat.map((j) => j.s.zone).filter((z): z is [number, number] => !!z)
+    return (p: number) => zs.some(([lo, hi]) => p >= lo - 0.01 && p <= hi + 0.01)
+  }, [riwayat])
   const zones = useMemo<Band[]>(() => {
-    const z: Band[] = [...(a?.zones ?? [])]
+    const z: Band[] = (a?.zones ?? []).filter((x) => !(diZonaSelesai(x.lo) && diZonaSelesai(x.hi)))
     const r = a?.amd?.rangeAsia
     if (r) z.push({ lo: r.lo, hi: r.hi, side: 'range', label: 'Range Asia' })
     return z
-  }, [a])
+  }, [a, diZonaSelesai])
+  const levels = useMemo(() => (a?.levels ?? NO_LEVELS).filter((l) => !(l.kind.startsWith('zona') && diZonaSelesai(l.price))), [a, diZonaSelesai])
 
   const spot = feed.last ?? a?.price ?? null
   const price = spot == null ? null : spot + off
@@ -245,7 +285,7 @@ export default function App() {
               </div>
             </div>
             <Chart
-              bars={feed.bars} shift={off} setup={setup} zones={zones} levels={a?.levels ?? NO_LEVELS} bot={botTerbuka}
+              bars={feed.bars} shift={off} setup={setup} zones={zones} levels={levels} bot={botTerbuka}
               emptyText={feed.status === 'error' ? 'Feed harga belum tersambung' : 'Memuat harga live'}
             />
             <div className="legend">
@@ -291,7 +331,7 @@ export default function App() {
                 <p>Jalankan <code>/analisa-pair {PAIR} {mode}</code> di Claude Code. Hasilnya langsung muncul di sini.</p>
               </div>
             ) : (
-              <Setups setups={a.setups ?? []} idx={idx} onPick={(i) => setPick({ key: akey, idx: i })} off={off} price={feed.last} log={log.rows} />
+              <Setups aktif={aktif} riwayat={riwayat} idx={idx} onPick={(i) => setPick({ key: akey, idx: i })} off={off} price={feed.last} log={log.rows} />
             )}
           </section>
           <Bot status={bot.status} trades={bot.trades} />
