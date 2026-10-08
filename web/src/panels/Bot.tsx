@@ -36,8 +36,9 @@ function KontrolMt5({ setup, off }: { setup?: Setup | null; off: number }) {
   const AKUN = a?.akun.toUpperCase() ?? ''
   const mati = putus || !a || kirim
   const pctRisiko = a ? +(a.risiko * 100).toFixed(2) : '–'
-  const jalankan = async (tanya: string, path: string, body: unknown, ok: (j: Jawab) => string) => {
-    if (!confirm(tanya)) return
+  const [yakin, setYakin] = useState(false)
+  const jalankan = async (tanya: string | null, path: string, body: unknown, ok: (j: Jawab) => string) => {
+    if (tanya && !confirm(tanya)) return
     setKirim(true); setHasil(null)
     try {
       setHasil({ ok: true, teks: ok(await kirimMt5<Jawab>(path, body)) })
@@ -51,9 +52,8 @@ function KontrolMt5({ setup, off }: { setup?: Setup | null; off: number }) {
   const batalOrder = (o: Order) => jalankan(
     `Batalkan order ${o.side.toUpperCase()} ${o.jenis.toUpperCase()} ${o.lot} lot @ ${fmt(o.harga, 2)} (tiket ${o.tiket}) di akun ${AKUN}?`,
     '/order/close', { tiket: o.tiket }, (j) => j.pesan ?? 'Order dibatalkan.')
-  const tutupSemua = () => a && jalankan(
-    `Tutup ${a.posisi.length} posisi dan hapus ${a.order.length} order di akun ${AKUN}?`,
-    '/order/close-all', {}, (j) => j.pesan ?? 'Selesai.')
+  // konfirmasi di kartu (bukan popup) supaya close all tidak terjadi karena salah klik
+  const tutupSemua = () => { setYakin(false); jalankan(null, '/order/close-all', {}, (j) => j.pesan ?? 'Selesai.') }
   const pasang = (e: FormEvent) => {
     e.preventDefault()
     const lot = f.lot.trim() ? Number(f.lot) : null
@@ -101,8 +101,17 @@ function KontrolMt5({ setup, off }: { setup?: Setup | null; off: number }) {
       ))}
       <div className="bot-top">
         <button type="button" className="theme-btn" aria-expanded={buka} disabled={putus || !a} onClick={() => setBuka(!buka)}>Set limit</button>
-        <button type="button" className="theme-btn bahaya" disabled={!a || mati || (!a.posisi.length && !a.order.length)} onClick={tutupSemua}>Close all</button>
+        <button type="button" className="theme-btn bahaya" disabled={!a || mati || (!a.posisi.length && !a.order.length)} aria-expanded={yakin} onClick={() => setYakin(!yakin)}>Close all</button>
       </div>
+      {yakin && a && (a.posisi.length > 0 || a.order.length > 0) && (
+        <div className="setup-state off yakin" role="alertdialog" aria-label="Konfirmasi close all">
+          <p>Tutup <b>{a.posisi.length} posisi</b> dan hapus <b>{a.order.length} order</b> di akun <b>{AKUN}</b>? Tidak bisa dibatalkan.</p>
+          <div className="bot-top">
+            <button type="button" className="theme-btn" autoFocus onClick={() => setYakin(false)}>Batal</button>
+            <button type="button" className="theme-btn bahaya-isi" disabled={mati} onClick={tutupSemua}>Ya, tutup semua</button>
+          </div>
+        </div>
+      )}
       {buka && (
         <form className="form-limit" onSubmit={pasang}>
           <div className="seg" role="group" aria-label="Jenis order">

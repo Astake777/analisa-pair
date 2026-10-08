@@ -52,7 +52,7 @@ function live(log: LogRow[] | null, strategi?: string) {
   return `Live: ${done.length} setup selesai, ${tp} kena TP, total ${r >= 0 ? '+' : ''}${r.toFixed(1)}R.`
 }
 
-export function Setups({ aktif, riwayat, idx, onPick, off, price, log, onBatal }: Props) {
+export function Setups({ aktif, riwayat, idx, onPick, off, price, log, onBatal, perintah }: Props & { perintah: string }) {
   const setups = aktif.map((j) => j.s)
   const [kirim, setKirim] = useState<string | null>(null)
   const [gagal, setGagal] = useState<{ k: string; pesan: string } | null>(null)
@@ -73,6 +73,7 @@ export function Setups({ aktif, riwayat, idx, onPick, off, price, log, onBatal }
         <div className="state compact">
           <h2>Belum ada setup aktif</h2>
           <p>{riwayat.length ? 'Setup sebelumnya ada di kartu Riwayat.' : 'Sistem mengabari begitu zona yang memenuhi syarat muncul.'}</p>
+          <p>Jalankan <code>{perintah}</code> di Claude Code. Hasilnya langsung muncul di sini.</p>
         </div>
       )}
       {setups.map((s, i) => {

@@ -387,7 +387,7 @@ export default function App() {
                 <p>Jalankan <code>/analisa-pair {PAIR} {mode}</code> di Claude Code. Hasilnya langsung muncul di sini.</p>
               </div>
             ) : (
-              <Setups aktif={aktif} riwayat={riwayat} idx={idx} onPick={(i) => setPick({ key: akey, idx: i })} off={off} price={feed.last} log={log.rows} onBatal={muatBatal} />
+              <Setups aktif={aktif} riwayat={riwayat} idx={idx} onPick={(i) => setPick({ key: akey, idx: i })} off={off} price={feed.last} log={log.rows} onBatal={muatBatal} perintah={`/analisa-pair ${PAIR} ${mode}`} />
             )}
           </section>
           {!lebar && botDst}
