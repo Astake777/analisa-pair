@@ -44,7 +44,14 @@ create table if not exists public.bot_status (
 
 alter table public.bot_trades enable row level security;
 alter table public.bot_status enable row level security;
+-- aman dijalankan ulang
+drop policy if exists "baca bot_trades" on public.bot_trades;
+drop policy if exists "baca bot_status" on public.bot_status;
 create policy "baca bot_trades" on public.bot_trades for select to anon, authenticated using (true);
 create policy "baca bot_status" on public.bot_status for select to anon, authenticated using (true);
-alter publication supabase_realtime add table public.bot_trades;
-alter publication supabase_realtime add table public.bot_status;
+do $$ begin
+  alter publication supabase_realtime add table public.bot_trades;
+exception when duplicate_object then null; end $$;
+do $$ begin
+  alter publication supabase_realtime add table public.bot_status;
+exception when duplicate_object then null; end $$;
