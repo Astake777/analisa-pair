@@ -3,6 +3,7 @@
 Pakai:  python pantau.py [PAIR]            loop terus (dijalankan Claude lewat Monitor -> push ke HP)
         python pantau.py [PAIR] --sekali   satu putaran
         python pantau.py [PAIR] --uji      publikasi setup UJI dari harga sekarang, lalu kembalikan analisis semula
+        tambah --sumber mt5                candle dari terminal MT5 (tanpa Binance); layak = validasi mt5 atau umum
 Baris keluaran (stdout = event): SETUP, TERISI, SELESAI, BATAL, ERROR (sekali per jenis), PULIH.
 Aturan setup:
   - batal kalau belum terisi dan harga sudah BATAL_FRAC (70%) jalan ke TP1, atau limit lewat EXPIRE_S strategi;
@@ -32,6 +33,7 @@ STRATEGI = ["sniper", "alchemist_london", "alchemist_crt"]
 TFS = ["1m", "5m", "15m", "30m", "1h", "4h", "1d"]
 HARI_DATA = 60
 MODE = "scalp"
+SUMBER = "auto"   # "mt5" = candle broker lewat terminal MT5 (diatur main dari --sumber)
 DEKAT = 3.0
 NAMA = {"sniper": "Sniper 1m", "alchemist_london": "Alchemist London", "alchemist_crt": "Alchemist CRT"}
 r2 = lambda x: round(x, 2)
@@ -85,6 +87,12 @@ def info_validasi(nama, sumber=""):
     if rep["valid"]:
         return {"valid": True, "layak": True, "teks": f"Lulus validasi: {angka}."}
     return {"valid": False, "layak": m["expectancy"] > 0, "teks": f"Belum lulus validasi ({angka}). Pakai lot kecil."}
+
+
+def gabung_info(broker, umum):
+    """Sumber mt5 (aturan bot_mt5.sinyal_sekarang): layak kalau salah satu validasi layak, valid hanya dari data broker."""
+    teks = broker["teks"] if broker["layak"] else f"{umum['teks']} (data Binance, bukan broker)"
+    return {"valid": broker["valid"], "layak": broker["layak"] or umum["layak"], "teks": teks}
 
 
 def tp2(s, h1):
@@ -211,10 +219,11 @@ def putaran(pair, state, now=None, publikasi=True):
     import publish
     from strategi.sniper import arah_bias
     now = now or int(time.time())
-    by = data.load(pair, TFS, refresh=True)
+    by = data.load(pair, TFS, refresh=True, source=SUMBER)
     by = {tf: [r for r in rows if r[0] >= now - HARI_DATA * 86400] for tf, rows in by.items()}
     closed = {tf: [r for r in rows if r[0] + STEP[tf] <= now] for tf, rows in by.items()}
     m1, price = by["1m"], by["1m"][-1][4]
+    ada_taker = len(closed["1m"][-1]) > 6 if closed["1m"] else False   # candle MT5 tanpa kolom taker-buy
     berubah, log = False, []
 
     for i, a in list(state["aktif"].items()):
@@ -237,9 +246,14 @@ def putaran(pair, state, now=None, publikasi=True):
         mod = importlib.import_module(f"strategi.{nama}")
         exp_s = getattr(mod, "EXPIRE_S", 3600)
         info = info_validasi(nama)
+        if SUMBER == "mt5":
+            info = gabung_info(info_validasi(nama, "mt5"), info)
         if not info["layak"]:
             continue  # strategi yang OOS-nya rugi atau belum teruji tidak dikabarkan sama sekali
-        for s in mod.signals(closed, MODE):
+        p = dict(mod.PARAMS)
+        if p.get("delta") and not ada_taker:
+            p["delta"] = False   # tanpa sisi agresor: varian tanpa delta (seperti bot_mt5)
+        for s in mod.signals(closed, MODE, p):
             i = sid(nama, s)
             if s["time"] < now - exp_s or i in state["seen"]:
                 continue
@@ -296,7 +310,7 @@ def uji(pair):
     import data
     import publish
     old = payload_terakhir(pair)
-    by = data.load(pair, ["1m", "1h"], refresh=True)
+    by = data.load(pair, ["1m", "1h"], refresh=True, source=SUMBER)
     price = by["1m"][-1][4]
     e = r2(price + 5)
     s = {"time": int(time.time()), "side": "sell", "entry": e, "sl": r2(e + 3.5), "tp": [r2(e - 10.5)],
@@ -333,10 +347,18 @@ def _selftest():
     p = susun({"setups": [{"label": "sniper", "zone": [1, 2]}, {"label": "utama"}], "zones": [{"lo": 1, "hi": 2}],
                "status": "SIAP"}, [], 99.0, 0)
     assert [x["label"] for x in p["setups"]] == ["utama"] and not p["zones"] and p["status"] == "NO TRADE", p
+    # mt5: layak kalau salah satu layak; valid hanya dari validasi broker
+    v = lambda valid, layak: {"valid": valid, "layak": layak, "teks": "x"}
+    assert gabung_info(v(False, False), v(True, True)) == {"valid": False, "layak": True, "teks": "x (data Binance, bukan broker)"}
+    assert gabung_info(v(True, True), v(False, False))["valid"] and not gabung_info(v(False, False), v(False, False))["layak"]
     print("selftest OK")
 
 
 def main(args):
+    global SUMBER
+    if "--sumber" in args:
+        i = args.index("--sumber")
+        SUMBER, args = args[i + 1], args[:i] + args[i + 2:]
     pair = next((a.upper() for a in args if not a.startswith("--")), "XAUUSD")
     if "--uji" in args:
         return uji(pair)

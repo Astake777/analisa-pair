@@ -17,9 +17,15 @@ export default defineConfig(({ mode }) => {
     headers: { 'User-Agent': 'Mozilla/5.0' },
     rewrite: (p) => p.replace(/^\/yahoo/, ''),
   }
+  // Jembatan MT5 lokal (jembatan_mt5.py) untuk harga broker HFM.
+  const mt5: ProxyOptions = {
+    target: 'http://127.0.0.1:5181',
+    rewrite: (p) => p.replace(/^\/mt5/, ''),
+  }
   const proxy: Record<string, ProxyOptions> = enabled
     ? {
         '/yahoo': yahoo,
+        '/mt5': mt5,
         '/oanda/api': {
           target: `https://api-${host}.oanda.com`,
           changeOrigin: true,
@@ -33,7 +39,7 @@ export default defineConfig(({ mode }) => {
           rewrite: () => `/v3/accounts/${encodeURIComponent(account)}/pricing/stream?instruments=XAU_USD`,
         },
       }
-    : { '/yahoo': yahoo }
+    : { '/yahoo': yahoo, '/mt5': mt5 }
 
   return {
     plugins: [react()],

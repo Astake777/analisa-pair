@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { startBinance } from './binance'
+import { startMt5 } from './mt5'
 import { startOanda } from './oanda'
 
 declare const __OANDA_ENABLED__: boolean
@@ -37,16 +38,21 @@ export function throttle(fn: () => void, ms = 250) {
   return run
 }
 
+export type Source = 'mt5' | 'oanda' | 'binance'
+// Urutan cadangan: MT5 lokal dulu, lalu OANDA (kalau dikonfigurasi), terakhir Binance.
+const ORDER: Source[] = __OANDA_ENABLED__ ? ['mt5', 'oanda', 'binance'] : ['mt5', 'binance']
+
 const INITIAL: FeedState = { bars: [], last: null, lastTick: 0, status: 'connecting', label: '' }
 
 export function useLiveFeed(tf: TF) {
-  const [source, setSource] = useState<'oanda' | 'binance'>(__OANDA_ENABLED__ ? 'oanda' : 'binance')
+  const [source, setSource] = useState<Source>('mt5')
   const [state, setState] = useState<FeedState & { key: string }>({ ...INITIAL, key: '' })
   const key = `${source}:${tf}`
 
   useEffect(() => {
-    const start = source === 'oanda' ? startOanda : startBinance
-    return start(tf, (s) => setState((p) => ({ ...(p.key === key ? p : { ...INITIAL, last: p.last, lastTick: p.lastTick }), ...s, key })), () => setSource('binance'))
+    const start = { mt5: startMt5, oanda: startOanda, binance: startBinance }[source]
+    const next = ORDER[ORDER.indexOf(source) + 1] ?? 'binance'
+    return start(tf, (s) => setState((p) => ({ ...(p.key === key ? p : { ...INITIAL, last: p.last, lastTick: p.lastTick }), ...s, key })), () => setSource(next))
   }, [tf, source, key])
 
   const s = state.key === key ? state : { ...INITIAL, last: state.last, lastTick: state.lastTick }

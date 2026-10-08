@@ -16,7 +16,7 @@ input double BE_Trigger_Pips   = 50.0;   // Profit pips -> SL digeser ke entry (
 input int    Max_SL_Harian     = 2;
 input int    Max_Entry_Harian  = 3;
 input int    Max_Spread_Points = 100;
-input int    News_Menit        = 15;     // Tidak order +/- menit dari news USD high (live saja, kalender tidak ada di tester)
+input int    News_Menit        = 15;     // Tidak order +/- menit dari news USD high (live: kalender MT5 + analisa_news.csv, tester: analisa_news.csv)
 input group "Sniper (PARAMS strategi/sniper.py)"
 input double Disp         = 1.5;         // Body displacement >= Disp x ATR M15
 input int    Cari_OB      = 3;
@@ -45,6 +45,9 @@ datetime last_m1 = 0, last_m15 = 0, be_gagal = 0;
 int      hari = -1, n_sl = 0, n_entry = 0;
 int      hE20H1, hE50H1, hE20M30, hE50M30;
 bool     tester;
+datetime news[];                         // event USD high dari analisa_news.csv (epoch UTC, urut)
+datetime news_muat = 0;
+int      fcsv = INVALID_HANDLE;          // log tester SniperBot_tester.csv
 
 //--- util
 void Log(string s)
@@ -58,9 +61,29 @@ double N(double x) { return NormalizeDouble(x, _Digits); }
 
 double RiskFrac() { return MathMin(MathMax(Risk_Percentage, 25.0), 30.0) / 100.0; }
 
+//--- waktu: server HFM = UTC+3 saat DST AS, selain itu UTC+2 (TimeGMT tidak jalan di tester)
+datetime MingguKe(int y, int m, int n)   // hari Minggu ke-n bulan m, jam 00:00
+{
+   datetime t = StringToTime(StringFormat("%d.%02d.01", y, m));
+   MqlDateTime d;
+   TimeToStruct(t, d);
+   return t + ((7 - d.day_of_week) % 7 + 7 * (n - 1)) * 86400;
+}
+
+datetime KeUtc(datetime server_t)
+{
+   datetime u = server_t - 3 * 3600;     // perkiraan UTC untuk menentukan DST
+   MqlDateTime d;
+   TimeToStruct(u, d);
+   bool dst = u >= MingguKe(d.year, 3, 2) + 7 * 3600 && u < MingguKe(d.year, 11, 1) + 6 * 3600;
+   return server_t - (dst ? 3 : 2) * 3600;
+}
+
+int HariWib() { return (int)((KeUtc(TimeCurrent()) + 7 * 3600) / 86400); }
+
 void ResetHarian()
 {
-   int d = (int)(TimeCurrent() / 86400);   // ponytail: hari server, bukan hari WIB seperti bot Python
+   int d = HariWib();
    if(d != hari) { hari = d; n_sl = 0; n_entry = 0; }
 }
 
@@ -273,23 +296,70 @@ int Terbuka()
    return n;
 }
 
+//--- news dari file Python di Common Files: satu epoch UTC per baris
+void MuatNews()
+{
+   news_muat = TimeCurrent();
+   int f = FileOpen("analisa_news.csv", FILE_READ | FILE_TXT | FILE_ANSI | FILE_COMMON);
+   if(f == INVALID_HANDLE)
+   {
+      static bool sudah = false;
+      if(!sudah) Print("Peringatan: analisa_news.csv tidak ada di Common Files, lanjut tanpa news dari file");
+      sudah = true;
+      return;
+   }
+   ArrayResize(news, 0);
+   while(!FileIsEnding(f))
+   {
+      long v = StringToInteger(FileReadString(f));
+      if(v <= 0) continue;
+      int n = ArraySize(news);
+      ArrayResize(news, n + 1, 256);
+      news[n] = (datetime)v;
+   }
+   FileClose(f);
+   ArraySort(news);
+}
+
 bool DekatNews()
 {
-   if(News_Menit <= 0 || tester) return false;
+   if(News_Menit <= 0) return false;
    static datetime cek = 0;
    static bool hasil = false;
    if(TimeCurrent() - cek < 60) return hasil;
    cek = TimeCurrent();
    hasil = false;
-   MqlCalendarValue v[];
-   datetime now = TimeTradeServer();
-   if(CalendarValueHistory(v, now - News_Menit * 60, now + News_Menit * 60, NULL, "USD") > 0)
-      for(int i = 0; i < ArraySize(v); i++)
-      {
-         MqlCalendarEvent ev;
-         if(CalendarEventById(v[i].event_id, ev) && ev.importance == CALENDAR_IMPORTANCE_HIGH) { hasil = true; break; }
-      }
+   if(!tester)
+   {
+      if(TimeCurrent() - news_muat >= 6 * 3600) MuatNews();
+      MqlCalendarValue v[];
+      datetime now = TimeTradeServer();
+      if(CalendarValueHistory(v, now - News_Menit * 60, now + News_Menit * 60, NULL, "USD") > 0)
+         for(int i = 0; i < ArraySize(v); i++)
+         {
+            MqlCalendarEvent ev;
+            if(CalendarEventById(v[i].event_id, ev) && ev.importance == CALENDAR_IMPORTANCE_HIGH) { hasil = true; break; }
+         }
+   }
+   if(!hasil)   // tester, atau kalender kosong/gagal
+   {
+      datetime u = KeUtc(TimeCurrent());
+      for(int i = 0; i < ArraySize(news) && news[i] <= u + News_Menit * 60; i++)
+         if(news[i] >= u - News_Menit * 60) { hasil = true; break; }
+   }
    return hasil;
+}
+
+//--- log CSV tester: waktu epoch UTC, teks tanpa koma
+void Catat(string jenis, datetime w, datetime masuk, bool beli, double entry, double sl, double tp, double lot,
+           string keluar, string pl, string hasil, string alasan)
+{
+   if(fcsv == INVALID_HANDLE) return;
+   StringReplace(alasan, ",", ";");
+   FileWrite(fcsv, jenis, IntegerToString((long)w), masuk > 0 ? IntegerToString((long)masuk) : "", beli ? "buy" : "sell",
+             DoubleToString(entry, 2), DoubleToString(sl, 2), DoubleToString(tp, 2), DoubleToString(lot, 2),
+             keluar, pl, hasil, DoubleToString(AccountInfoDouble(ACCOUNT_BALANCE), 2), alasan);
+   FileFlush(fcsv);
 }
 
 bool BolehOrder(string &alasan)
@@ -309,21 +379,35 @@ void Pasang(const Poi &z, double ujung, datetime tsig)
    int s = z.side;
    double sl = N(ujung - s * Pad), entry = N(sl + s * SL_Jarak), tp = N(entry + s * MathMax(TP_Min, RR * SL_Jarak));
    string arah = s > 0 ? "BUY" : "SELL";
-   string alasan;
-   if(!BolehOrder(alasan)) { Log(StringFormat("BOT LEWATI %s %.2f: %s", arah, entry, alasan)); return; }
+   string alasan = "";
    double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID), ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
-   if(s > 0 ? ask <= entry : bid >= entry) { Log(StringFormat("BOT LEWATI %s %.2f: harga sudah melewati entry", arah, entry)); return; }
    double batas = entry + (tp - entry) * Batal_Frac;
-   if(s > 0 ? ask >= batas : bid <= batas) { Log(StringFormat("BOT LEWATI %s %.2f: harga sudah 70%% ke TP", arah, entry)); return; }
-   double ra, pips, pv;
-   double lot = LotDinamis(entry, sl, ra, pips, pv);
-   if(lot <= 0) { Log(StringFormat("BOT LEWATI %s %.2f: SL %.1f pips, lot minimum rugi lebih dari %.2f", arah, entry, pips, ra)); return; }
-   trade.SetExpertMagicNumber(Magic);
-   bool ok = s > 0 ? trade.BuyLimit(lot, entry, _Symbol, sl, tp, ORDER_TIME_GTC, 0, "sniper")
-                   : trade.SellLimit(lot, entry, _Symbol, sl, tp, ORDER_TIME_GTC, 0, "sniper");
-   if(!ok) { Log(StringFormat("BOT ERROR order %s %.2f: %d %s", arah, entry, trade.ResultRetcode(), trade.ResultComment())); return; }
-   Log(StringFormat("BOT ORDER %s LIMIT %.2f lot @ %.2f | SL %.2f | TP %.2f | lot = %.2f / (%.1f pips x %.2f) | rugi di SL %.2f (%.0f%% saldo) | POI M15 %.2f-%.2f: %s, sweep %.2f lalu CHoCH M1",
-                    arah, lot, entry, sl, tp, ra, pips, pv, lot * pips * pv, RiskFrac() * 100, z.lo, z.hi, z.alasan, ujung));
+   double ra = 0, pips = 0, pv = 0, lot = 0;
+   if(!BolehOrder(alasan)) {}
+   else if(s > 0 ? ask <= entry : bid >= entry) alasan = "harga sudah melewati entry";
+   else if(s > 0 ? ask >= batas : bid <= batas) alasan = "harga sudah 70% ke TP";
+   else if((lot = LotDinamis(entry, sl, ra, pips, pv)) <= 0)
+      alasan = StringFormat("SL %.1f pips, lot minimum rugi lebih dari %.2f", pips, ra);
+   else
+   {
+      trade.SetExpertMagicNumber(Magic);
+      bool ok = s > 0 ? trade.BuyLimit(lot, entry, _Symbol, sl, tp, ORDER_TIME_GTC, 0, "sniper")
+                      : trade.SellLimit(lot, entry, _Symbol, sl, tp, ORDER_TIME_GTC, 0, "sniper");
+      if(ok)
+      {
+         string poi = StringFormat("POI M15 %.2f-%.2f: %s, sweep %.2f lalu CHoCH M1", z.lo, z.hi, z.alasan, ujung);
+         Log(StringFormat("BOT ORDER %s LIMIT %.2f lot @ %.2f | SL %.2f | TP %.2f | lot = %.2f / (%.1f pips x %.2f) | rugi di SL %.2f (%.0f%% saldo) | %s",
+                          arah, lot, entry, sl, tp, ra, pips, pv, lot * pips * pv, RiskFrac() * 100, poi));
+         Catat("SINYAL", KeUtc(tsig), 0, s > 0, entry, sl, tp, lot, "", "", "ORDER", poi);
+         return;
+      }
+      Log(StringFormat("BOT ERROR order %s %.2f: %d %s", arah, entry, trade.ResultRetcode(), trade.ResultComment()));
+      Catat("SINYAL", KeUtc(tsig), 0, s > 0, entry, sl, tp, 0, "", "", "LEWATI",
+            StringFormat("error order %d %s", trade.ResultRetcode(), trade.ResultComment()));
+      return;
+   }
+   Log(StringFormat("BOT LEWATI %s %.2f: %s", arah, entry, alasan));
+   Catat("SINYAL", KeUtc(tsig), 0, s > 0, entry, sl, tp, 0, "", "", "LEWATI", alasan);
 }
 
 //--- tiap tick: auto break-even dan pembatalan limit
@@ -376,6 +460,17 @@ int OnInit()
    hE50M30 = iMA(_Symbol, PERIOD_M30, 50, 0, MODE_EMA, PRICE_CLOSE);
    if(hE20H1 == INVALID_HANDLE || hE50H1 == INVALID_HANDLE || hE20M30 == INVALID_HANDLE || hE50M30 == INVALID_HANDLE)
       return INIT_FAILED;
+   MuatNews();
+   if(tester)
+   {
+      fcsv = FileOpen("SniperBot_tester.csv", FILE_WRITE | FILE_CSV | FILE_ANSI | FILE_COMMON, ',');
+      if(fcsv == INVALID_HANDLE) Print("Peringatan: SniperBot_tester.csv gagal dibuka: ", GetLastError());
+      else
+      {
+         FileWrite(fcsv, "jenis", "waktu_utc", "masuk_utc", "side", "entry", "sl", "tp", "lot", "harga_keluar", "pl", "hasil", "saldo", "alasan");
+         FileFlush(fcsv);
+      }
+   }
    trade.SetExpertMagicNumber(Magic);
    trade.SetDeviationInPoints(20);
    Log(StringFormat("BOT MULAI %s, risiko %.0f%% saldo = %.2f %s/trade (lot dinamis dari lebar SL), auto BE %s",
@@ -387,6 +482,7 @@ int OnInit()
 void OnDeinit(const int reason)
 {
    IndicatorRelease(hE20H1); IndicatorRelease(hE50H1); IndicatorRelease(hE20M30); IndicatorRelease(hE50M30);
+   if(fcsv != INVALID_HANDLE) { FileClose(fcsv); fcsv = INVALID_HANDLE; }
 }
 
 void OnTick()
@@ -439,6 +535,29 @@ void OnTradeTransaction(const MqlTradeTransaction &t, const MqlTradeRequest &rq,
                   : alasan == DEAL_REASON_SL ? (pl < -0.05 * saldo_awal ? "SL" : "BE")
                   : "DITUTUP";
    if(hasil == "SL") n_sl++;
+   if(fcsv != INVALID_HANDLE)
+   {
+      // id posisi = tiket limit order; SL asli dari order, sebelum digeser BE
+      datetime t_out = (datetime)HistoryDealGetInteger(t.deal, DEAL_TIME);
+      double vol = HistoryDealGetDouble(t.deal, DEAL_VOLUME);
+      long pos = HistoryDealGetInteger(t.deal, DEAL_POSITION_ID);
+      datetime t_in = 0;
+      double e_in = 0, sl0 = 0, tp0 = 0;
+      bool beli = true;
+      if(HistorySelectByPosition(pos))
+         for(int i = 0; i < HistoryDealsTotal(); i++)
+         {
+            ulong d = HistoryDealGetTicket(i);
+            if(HistoryDealGetInteger(d, DEAL_ENTRY) != DEAL_ENTRY_IN) continue;
+            t_in = (datetime)HistoryDealGetInteger(d, DEAL_TIME);
+            e_in = HistoryDealGetDouble(d, DEAL_PRICE);
+            beli = HistoryDealGetInteger(d, DEAL_TYPE) == DEAL_TYPE_BUY;
+            break;
+         }
+      if(HistoryOrderSelect(pos)) { sl0 = HistoryOrderGetDouble(pos, ORDER_SL); tp0 = HistoryOrderGetDouble(pos, ORDER_TP); }
+      Catat("TRADE", KeUtc(t_out), t_in > 0 ? KeUtc(t_in) : 0, beli, e_in, sl0, tp0, vol,
+            DoubleToString(harga, 2), DoubleToString(pl, 2), hasil, "");
+   }
    Log(StringFormat("BOT %s @ %.2f: P/L %+.2f %s, saldo %.2f", hasil, harga, pl, AccountInfoString(ACCOUNT_CURRENCY), AccountInfoDouble(ACCOUNT_BALANCE)));
 }
 //+------------------------------------------------------------------+

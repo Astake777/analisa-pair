@@ -325,7 +325,7 @@ export default function App() {
       </div>
 
       <p className="foot">
-        Harga live dari {feed.source === 'oanda' ? 'OANDA XAU_USD (mid)' : 'XAUT Binance yang dikoreksi ke spot gold-api'}. Level dan zona dalam harga spot XAU.
+        Harga live dari {{ mt5: 'MT5 broker HFM (mid bid/ask)', oanda: 'OANDA XAU_USD (mid)', binance: 'XAUT Binance yang dikoreksi ke spot gold-api' }[feed.source]}. Level dan zona dalam harga spot XAU.
         Isi selisih ke harga broker di atas supaya chart dan level cocok dengan platformmu. Ini analisis teknikal, bukan nasihat keuangan.
       </p>
     </div>

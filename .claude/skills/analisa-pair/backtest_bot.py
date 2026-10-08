@@ -9,7 +9,7 @@ close di periode tumpang tindih). Delta orderflow tidak dipakai (candle broker t
 Ini backtest seluruh sampel dengan PARAMS strategi saat ini (bukan walk-forward); kelulusan strategi tetap dari
 validasi.py.
 Pakai:  python backtest_bot.py [strategi ...]      bawaan: semua strategi (REGISTRY, EKSTRA, Alchemist)
-Keluaran: ringkasan di layar + data/backtest/bot_<waktu>.json (dipakai kinerja.py, tab "Bot HFM")
+Keluaran: ringkasan di layar + data/backtest/bot_<waktu>.json (arsip; panel website kini memakai hasil Strategy Tester EA)
 Self-check: python backtest_bot.py --selftest
 """
 import datetime as dt
