@@ -6,7 +6,7 @@ type Strat = {
   maxDrawdown: number; sharpe: number | null; sortino: number | null; calmar: number | null; winRate: number | null
   expectancy: number; expectancyR: number | null; posisi: number; kurva: [number, number][]; hari: number
 }
-type Data = { dibuat: string; asumsi: string; strategi: Strat[] }
+type Data = { dibuat: string; asumsi: string; mataUang?: string; strategi: Strat[] }
 
 const pct = (v: number | null, d = 2) => (v == null ? '-' : `${v > 0 ? '+' : ''}${(v * 100).toFixed(d)}%`)
 const num = (v: number | null) => (v == null ? '-' : v.toFixed(2))
@@ -61,7 +61,7 @@ export function Kinerja() {
           <>
             <Kurva pts={s.kurva} />
             <dl className="kin">
-              <div><dt>Earnings</dt><dd className={`num ${tone(s.earnings)}`}>{s.earnings >= 0 ? '+' : '-'}${fmt(Math.abs(s.earnings), 2)}</dd></div>
+              <div><dt>Earnings</dt><dd className={`num ${tone(s.earnings)}`}>{s.earnings >= 0 ? '+' : '-'}{data.mataUang && data.mataUang !== 'USD' ? `${fmt(Math.abs(s.earnings), 2)} ${data.mataUang}` : `$${fmt(Math.abs(s.earnings), 2)}`}</dd></div>
               <div><dt>Total return</dt><dd className={`num ${tone(s.totalReturn)}`}>{pct(s.totalReturn)}</dd></div>
               <div><dt>Annual return</dt><dd className={`num ${tone(s.annualReturn)}`}>{s.annualReturn == null ? `- (${s.hari} hari)` : pct(s.annualReturn)}</dd></div>
               <div><dt>Max drawdown</dt><dd className="num down">{pct(s.maxDrawdown)}</dd></div>

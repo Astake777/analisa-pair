@@ -1,6 +1,7 @@
 """Koneksi ke terminal MetaTrader 5 (paket Python MetaTrader5): login dari .env, simbol emas, candle broker.
 
-.env: MT5_LOGIN, MT5_PASSWORD, MT5_SERVER (wajib), MT5_PATH (opsional, terminal64.exe), MT5_SYMBOL (opsional).
+.env: MT5_LOGIN, MT5_PASSWORD, MT5_SERVER; kalau kosong, menempel ke akun yang sudah login di terminal.
+MT5_PATH (opsional, terminal64.exe), MT5_SYMBOL (opsional).
 Password tidak pernah dicetak.
 Pakai:  python mt5_link.py         status koneksi (akun demo/real, simbol, spesifikasi)
 Self-check: python mt5_link.py --selftest
@@ -14,6 +15,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 TF = {"1m": "TIMEFRAME_M1", "5m": "TIMEFRAME_M5", "15m": "TIMEFRAME_M15", "30m": "TIMEFRAME_M30",
       "1h": "TIMEFRAME_H1", "4h": "TIMEFRAME_H4", "1d": "TIMEFRAME_D1"}
 JENIS = {0: "demo", 1: "contest", 2: "real"}
+DEFAULT_PATH = r"C:\Program Files\MetaTrader 5\terminal64.exe"
 _mt5 = None
 
 
@@ -35,7 +37,12 @@ def sambung(e=None, mt5=None):
         return mt5.account_info()
     hilang = [k for k in ("MT5_LOGIN", "MT5_PASSWORD", "MT5_SERVER") if not e.get(k)]
     if hilang:
-        raise RuntimeError(f"MT5: {', '.join(hilang)} belum diisi di .env (akun demo HFM).")
+        # tanpa kredensial di .env: menempel ke akun yang sudah login di terminal (password tersimpan di MT5)
+        kw = {"timeout": 30000, **({"path": e["MT5_PATH"]} if e.get("MT5_PATH") else {"path": DEFAULT_PATH})}
+        if mt5.initialize(**kw) and mt5.account_info() is not None:
+            return mt5.account_info()
+        raise RuntimeError("MT5: terminal belum login. Login akun demo HFM di jendela MT5 (centang Save password), "
+                           f"atau isi {', '.join(hilang)} di .env.")
     kw = {"login": int(e["MT5_LOGIN"]), "password": e["MT5_PASSWORD"], "server": e["MT5_SERVER"], "timeout": 30000}
     if e.get("MT5_PATH"):
         kw["path"] = e["MT5_PATH"]
@@ -148,11 +155,14 @@ def _selftest():
     p = Palsu()
     e = {"MT5_LOGIN": "111", "MT5_PASSWORD": "x", "MT5_SERVER": "HFMarketsGlobal-Demo"}
     assert sambung(e, p).trade_mode == 0
+    assert sambung({}, Palsu(login=2)).login == 2           # tanpa .env: menempel ke akun yang login di terminal
+    kosong = Palsu(login=3)
+    kosong.login_ok = False
     try:
-        sambung({"MT5_LOGIN": "1"}, Palsu(login=2))
-        raise AssertionError("harus gagal tanpa password/server")
+        sambung({"MT5_LOGIN": "1"}, kosong)
+        raise AssertionError("harus gagal tanpa password/server dan terminal belum login")
     except RuntimeError as x:
-        assert "MT5_PASSWORD" in str(x) and "MT5_SERVER" in str(x)
+        assert "belum login" in str(x) and "MT5_PASSWORD" in str(x)
     p2 = Palsu(login=5)
     p2.login_ok = False
     try:

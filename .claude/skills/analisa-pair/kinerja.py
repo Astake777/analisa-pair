@@ -15,7 +15,7 @@ import sys
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..")
 BT = os.path.join(ROOT, "data", "backtest")
 OUT = os.path.join(ROOT, "web", "public", "kinerja.json")
-MODAL, RISIKO = 10_000.0, 0.01
+MODAL, RISIKO, MATA_UANG = 10_000.0, 0.01, "USC"   # bawaan: akun cent 10.000 USC = $100
 MIN_HARI_TAHUNAN = 90   # periode lebih pendek tidak disetahunkan (angkanya menyesatkan)
 
 
@@ -97,18 +97,22 @@ def _selftest():
 
 def main():
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-    global RISIKO
+    global RISIKO, MODAL, MATA_UANG
     import bot_mt5
     import data
     RISIKO = bot_mt5.konfig(data.env())["risiko"]   # sama dengan risiko bot (BOT_RISK)
+    e = data.env()
+    MODAL = float(e.get("BOT_MODAL", MODAL))
+    MATA_UANG = e.get("BOT_MATA_UANG", MATA_UANG)
     out = {"dibuat": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-           "asumsi": f"Modal ${MODAL:,.0f}, risiko {RISIKO * 100:.1f}% ekuitas per trade (BOT_RISK), majemuk, biaya spread+slip dihitung. "
+           "mataUang": MATA_UANG, "modal": MODAL,
+           "asumsi": f"Modal {MODAL:,.0f} {MATA_UANG}{' (akun cent, = $' + format(MODAL / 100, ',.0f') + ')' if MATA_UANG == 'USC' else ''}, risiko {RISIKO * 100:.1f}% ekuitas per trade (BOT_RISK), majemuk, biaya spread+slip dihitung. "
                      "Hanya trade out-of-sample.",
            "strategi": [x for x in (sniper(), tren_pullback("scalp"), tren_pullback("intraday")) if x]}
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     json.dump(out, open(OUT, "w", encoding="utf-8"))
     for s in out["strategi"]:
-        print(f"{s['nama']}: {s['posisi']} posisi, earnings ${s['earnings']:,.2f}, total {s['totalReturn'] * 100:.2f}%, "
+        print(f"{s['nama']}: {s['posisi']} posisi, earnings {s['earnings']:,.2f} {MATA_UANG}, total {s['totalReturn'] * 100:.2f}%, "
               f"annual {'-' if s['annualReturn'] is None else round(s['annualReturn'] * 100, 2)}% ({s['hari']} hari), DD {s['maxDrawdown'] * 100:.2f}%, win {s['winRate'] and s['winRate'] * 100:.1f}%, "
               f"sharpe {s['sharpe']}, sortino {s['sortino']}, calmar {s['calmar']}")
     print(OUT)
