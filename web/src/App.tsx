@@ -5,11 +5,11 @@ import { TFS, useLiveFeed, type TF } from './feed'
 import { useLiveDrivers } from './feed/yahoo'
 import { age, fmt, marketOpen, signed, statusKind, store, wibTime } from './lib/format'
 import { FIXTURE, useAnalyses, useBot, useSetupLog, useBacktest, useMacro, useNewsOutlook, type Mode } from './lib/supabase'
-import { Amd, Bias, Calendar, Headlines, History, Levels, Notes, PrediksiNews, Strategi } from './panels/Analysis'
+import { Bias, Calendar, Headlines, Levels, Notes, PrediksiNews, Strategi } from './panels/Analysis'
 import { ASET, Drivers, Makro } from './panels/Drivers'
 import { Menjelang, Outlook } from './panels/Outlook'
-import { RekamJejak, Setups } from './panels/Setups'
-import { Kinerja } from './panels/Kinerja'
+import { Setups } from './panels/Setups'
+import { Rekap } from './panels/Rekap'
 import { Bot } from './panels/Bot'
 import { nasib, SELESAI, type Jejak } from './lib/nasib'
 
@@ -317,7 +317,6 @@ export default function App() {
                 <Levels a={a} off={off} price={spot} />
               </div>
               <Calendar events={a.events ?? []} />
-              <Strategi s={a.strategi} rows={bt.rows} error={bt.error} />
             </>
           )}
         </div>
@@ -345,15 +344,14 @@ export default function App() {
             )}
           </section>
           <Bot status={bot.status} trades={bot.trades} />
-          <RekamJejak rows={log.rows} error={log.error} />
-          <Kinerja />
-          {a?.amd && <Amd amd={a.amd} off={off} />}
+          <Rekap riwayat={riwayat} off={off} log={log.rows} logError={log.error} amd={a?.amd} analisis={an.rows} />
           {a && <Headlines items={a.headlines ?? []} />}
           {a && <Notes notes={a.notes ?? []} />}
         </aside>
       </div>
 
       <div className="lower">
+        {a && <div className="full"><Strategi s={a.strategi} rows={bt.rows} error={bt.error} /></div>}
         {macro.rows && <Makro rows={macro.rows} />}
         <section className="card full" aria-labelledby="drvTitle">
           <div className="card-head">
@@ -363,7 +361,6 @@ export default function App() {
           <Drivers items={drv} side={setup?.side} />
         </section>
         <Outlook rows={news.rows} error={news.error} />
-        {an.rows && an.rows.length > 0 && <History rows={an.rows} off={off} />}
       </div>
 
       <p className="foot">

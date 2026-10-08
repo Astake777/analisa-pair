@@ -32,7 +32,7 @@ function Kurva({ pts }: { pts: [number, number][] }) {
   )
 }
 
-export function Kinerja() {
+export function Kinerja({ bare = false }: { bare?: boolean }) {
   const [data, setData] = useState<Data | null>(null)
   const [err, setErr] = useState(false)
   const [pilih, setPilih] = useState(() => Number(store.get('kinerja') ?? 0) || 0)
@@ -42,21 +42,16 @@ export function Kinerja() {
   }, [])
 
   const s = data?.strategi[Math.min(pilih, (data?.strategi.length ?? 1) - 1)]
-  return (
-    <section className="card" aria-labelledby="kinTitle">
-      <div className="card-head">
-        <h2 id="kinTitle">Hasil backtest</h2>
-        {data && data.strategi.length > 1 && (
-          <div className="seg" role="group" aria-label="Pilih strategi">
-            {data.strategi.map((x, i) => (
-              <button key={x.nama} type="button" aria-pressed={x === s} onClick={() => { setPilih(i); store.set('kinerja', String(i)) }}>
-                {x.nama}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-      {err ? <p className="sub">Belum ada hasil. Jalankan <code>python .claude/skills/analisa-pair/kinerja.py</code> setelah backtest.</p>
+  const pilihan = data && data.strategi.length > 1 && (
+    <div className="seg" role="group" aria-label="Pilih strategi">
+      {data.strategi.map((x, i) => (
+        <button key={x.nama} type="button" aria-pressed={x === s} onClick={() => { setPilih(i); store.set('kinerja', String(i)) }}>
+          {x.nama}
+        </button>
+      ))}
+    </div>
+  )
+  const isi = err ? <p className="sub">Belum ada hasil. Jalankan <code>python .claude/skills/analisa-pair/kinerja.py</code> setelah backtest.</p>
         : !data ? <p className="sub">Memuat hasil backtest.</p>
         : !s ? <p className="sub">Belum ada trade out-of-sample.</p>
         : (
@@ -80,7 +75,12 @@ export function Kinerja() {
             </dl>
             <p className="sub kin-note">{s.nama}, {s.status}. {s.sumber}. {s.sumber.includes('bukan OOS') ? data.asumsi.replace(' Hanya trade out-of-sample.', '') : data.asumsi}</p>
           </>
-        )}
+        )
+  if (bare) return <div className="tab-isi">{pilihan}{isi}</div>
+  return (
+    <section className="card" aria-labelledby="kinTitle">
+      <div className="card-head"><h2 id="kinTitle">Hasil backtest</h2>{pilihan}</div>
+      {isi}
     </section>
   )
 }

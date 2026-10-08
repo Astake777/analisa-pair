@@ -53,7 +53,7 @@ export function Setups({ aktif, riwayat, idx, onPick, off, price, log }: Props) 
   return (
     <>
       {!setups.length && (
-        <p className="sub">{riwayat.length ? 'Belum ada setup aktif. Setup sebelumnya ada di riwayat di bawah.' : 'Belum ada setup. Sistem mengabari begitu zona yang memenuhi syarat muncul.'}</p>
+        <p className="sub">{riwayat.length ? 'Belum ada setup aktif. Setup sebelumnya ada di Riwayat & kinerja, tab Setup.' : 'Belum ada setup. Sistem mengabari begitu zona yang memenuhi syarat muncul.'}</p>
       )}
       {setups.map((s, i) => {
         const shown = i === idx
@@ -92,7 +92,6 @@ export function Setups({ aktif, riwayat, idx, onPick, off, price, log }: Props) 
           </article>
         )
       })}
-      {riwayat.length > 0 && <Riwayat rows={riwayat} off={off} />}
     </>
   )
 }
@@ -102,10 +101,10 @@ const STATUS: Record<string, [string, string]> = {
 }
 
 // Setup yang sudah selesai atau gugur, terbaru di atas.
-function Riwayat({ rows, off }: { rows: Jejak[]; off: number }) {
+export function Riwayat({ rows, off }: { rows: Jejak[]; off: number }) {
+  if (!rows.length) return <p className="sub">Belum ada setup yang selesai atau gugur.</p>
   return (
-    <div className="riwayat">
-      <h3>Riwayat setup</h3>
+    <div>
       <ul className="log">
         {rows.map((j) => {
           const [label, tone] = STATUS[j.n.status] ?? [j.n.status, 'sub']
@@ -135,8 +134,7 @@ const HASIL: Record<string, string> = { TP: 'TP', SL: 'SL' }
 
 export function RekamJejak({ rows, error }: { rows: LogRow[] | null; error: string | null }) {
   return (
-    <section className="card" aria-labelledby="logTitle">
-      <div className="card-head"><h2 id="logTitle">Rekam jejak live</h2></div>
+    <div>
       {error ? (
         <p className="sub">Tabel rekam jejak belum siap ({error}). Jalankan <code>supabase/migrations/20261008000000_setup_log.sql</code> di SQL Editor Supabase.</p>
       ) : rows == null ? <p className="sub">Memuat rekam jejak.</p>
@@ -155,6 +153,6 @@ export function RekamJejak({ rows, error }: { rows: LogRow[] | null; error: stri
             ))}
           </ul>
         )}
-    </section>
+    </div>
   )
 }

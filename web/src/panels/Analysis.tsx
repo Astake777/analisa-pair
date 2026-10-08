@@ -1,4 +1,5 @@
-import { FIXTURE, type Analysis, type BacktestRow, type Payload } from '../lib/supabase'
+import type { ReactNode } from 'react'
+import { FIXTURE, type BacktestRow, type Payload } from '../lib/supabase'
 import { dirClass, fmt, signed, wibTime } from '../lib/format'
 
 export function PrediksiNews({ items }: { items: NonNullable<Payload['prediksiNews']> }) {
@@ -183,13 +184,23 @@ export function Strategi({ s, rows, error }: { s: Payload['strategi']; rows: Bac
 
 const FASE: [string, string][] = [['A', 'Akumulasi'], ['M', 'Manipulasi'], ['D', 'Distribusi']]
 
-export function Amd({ amd, off }: { amd: NonNullable<Payload['amd']>; off: number }) {
+// Kartu biasa, atau isi saja (tanpa kartu) saat ditaruh di dalam tab.
+export function Bungkus({ bare, judul, id, sisi, children }: { bare: boolean; judul: string; id: string; sisi?: ReactNode; children: ReactNode }) {
+  if (bare) return <div className="tab-isi">{sisi && <div className="tab-sisi">{sisi}</div>}{children}</div>
+  return (
+    <section className="card" aria-labelledby={id}>
+      <div className="card-head"><h2 id={id}>{judul}</h2>{sisi}</div>
+      {children}
+    </section>
+  )
+}
+
+export function Amd({ amd, off, bare = false }: { amd: NonNullable<Payload['amd']>; off: number; bare?: boolean }) {
   const trend = /trend/i.test(amd.fase ?? '')
   const cur = (amd.fase ?? '').trim().charAt(0).toUpperCase()
   const r = amd.rangeAsia, sw = amd.sweep
   return (
-    <section className="card" aria-labelledby="amdTitle">
-      <div className="card-head"><h2 id="amdTitle">Fase AMD</h2>{amd.tanggal && <span className="sub num">{amd.tanggal}</span>}</div>
+    <Bungkus bare={bare} judul="Fase AMD" id="amdTitle" sisi={amd.tanggal && <span className="sub num">{amd.tanggal}</span>}>
       {trend
         ? <p className="amd-trend"><span className="tag ctx">Trend day</span> <span className="sub">Tidak ada pola akumulasi, manipulasi, distribusi hari ini.</span></p>
         : (
@@ -208,41 +219,6 @@ export function Amd({ amd, off }: { amd: NonNullable<Payload['amd']>; off: numbe
         </dd>
       </dl>
       {amd.catatan && <p className="sub" style={{ margin: '10px 0 0' }}>{amd.catatan}</p>}
-    </section>
-  )
-}
-
-export function History({ rows, off }: { rows: Analysis[]; off: number }) {
-  return (
-    <section className="card full" aria-labelledby="histTitle">
-      <div className="card-head"><h2 id="histTitle">Riwayat analisis</h2></div>
-      <div className="tbl-wrap">
-        <table>
-          <thead><tr>
-            <th>Waktu</th><th>Status</th><th>Arah</th><th className="r">Harga</th><th className="r">Entry</th>
-            <th className="r">SL</th><th className="r">TP</th><th>Keyakinan</th>
-          </tr></thead>
-          <tbody>
-            {rows.map((h, i) => {
-              const s = h.payload.setups?.[0]
-              const p = h.price ?? h.payload.price
-              return (
-                <tr key={h.id ?? i}>
-                  <td className="num nw">{wibTime(h.created_at)}</td>
-                  <td>{h.status}</td>
-                  <td className={s?.side === 'sell' ? 'down' : s?.side === 'buy' ? 'up' : ''}>{s ? s.side.toUpperCase() : '–'}</td>
-                  <td className="r num">{p != null ? fmt(Number(p) + off) : '–'}</td>
-                  <td className="r num">{s ? fmt(s.entry + off) : '–'}</td>
-                  <td className="r num">{s ? fmt(s.sl + off) : '–'}</td>
-                  <td className="r num">{s?.tp?.length ? s.tp.map((t) => fmt(t + off)).join(' / ') : '–'}</td>
-                  <td>{h.keyakinan ?? '–'}</td>
-                </tr>
-              )
-            })}
-            {!rows.length && <tr><td colSpan={8} className="sub">Belum ada riwayat untuk pair dan mode ini.</td></tr>}
-          </tbody>
-        </table>
-      </div>
-    </section>
+    </Bungkus>
   )
 }
