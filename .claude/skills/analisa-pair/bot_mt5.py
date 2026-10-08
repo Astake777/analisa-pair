@@ -28,6 +28,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from regime import STEP  # noqa: E402
 from validasi import BATAL_FRAC  # noqa: E402
+import mt5_link  # noqa: E402
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..")
 STOP_FILE = os.path.join(ROOT, "data", "BOT_STOP")
@@ -95,7 +96,7 @@ def req_limit(mt5, nama, s, lot, expire_s):
             "type": mt5.ORDER_TYPE_BUY_LIMIT if s["side"] == "buy" else mt5.ORDER_TYPE_SELL_LIMIT,
             "price": s["entry"], "sl": s["sl"], "tp": s["tp"][0], "deviation": 20, "magic": MAGIC,
             "comment": s["id"][-31:], "type_time": mt5.ORDER_TIME_SPECIFIED,
-            "expiration": int(s["time"] + expire_s), "type_filling": mt5.ORDER_FILLING_RETURN}
+            "expiration": mt5_link.ke_server(s["time"] + expire_s), "type_filling": mt5.ORDER_FILLING_RETURN}
 
 
 def syarat_live(jurnal, winrate_bt):
@@ -405,6 +406,9 @@ def main(args):
     if "--status" in args:
         s = mt5.symbol_info(nama)
         cek, ok = syarat_live(list(st["jurnal"].values()), winrate_backtest())
+        ukur, cocok = mt5_link.cek_offset(nama)
+        print(f"jam server: {'aturan GMT+' + str(mt5_link.offset_server(time.time()) // 3600)}"
+              f"{'' if ukur is None else f', terukur GMT+{ukur}'}{'' if cocok else '  <-- TIDAK COCOK, cek offset_server'}")
         print(f"akun {mt5_link.JENIS.get(akun.trade_mode)} {akun.server}, ekuitas {akun.equity} {akun.currency}, "
               f"mode bot {cfg['mode']}, risiko {cfg['risiko'] * 100:.1f}%/trade, simbol {nama} spread {s.spread}, "
               f"algo trading {'ON' if mt5.terminal_info().trade_allowed else 'OFF'}")
@@ -475,7 +479,7 @@ def _selftest():
     m = P()
     req = req_limit(m, "XAUUSD", s, 0.66, 3600)
     assert req["type"] == m.ORDER_TYPE_SELL_LIMIT and req["price"] == 4119.5 and req["sl"] == 4122.5 and req["tp"] == 4109.0
-    assert req["expiration"] == 4600 and req["magic"] == MAGIC and len(req["comment"]) <= 31
+    assert req["expiration"] == mt5_link.ke_server(4600) and req["magic"] == MAGIC and len(req["comment"]) <= 31
     # alur: order terpasang lalu dibatalkan karena harga 70% ke TP
     keluar = []
     st = {"jurnal": {}, "lewati": [], "harian": {}}

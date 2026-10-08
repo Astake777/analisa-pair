@@ -15,6 +15,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 TF = {"1m": "TIMEFRAME_M1", "5m": "TIMEFRAME_M5", "15m": "TIMEFRAME_M15", "30m": "TIMEFRAME_M30",
       "1h": "TIMEFRAME_H1", "4h": "TIMEFRAME_H4", "1d": "TIMEFRAME_D1"}
 JENIS = {0: "demo", 1: "contest", 2: "real"}
+POTONG_HARI = 20
 DEFAULT_PATH = r"C:\Program Files\MetaTrader 5\terminal64.exe"
 _mt5 = None
 
@@ -28,25 +29,23 @@ def modul():
 
 
 def sambung(e=None, mt5=None):
-    """Inisialisasi + login ke akun dari .env. -> account_info. Gagal -> RuntimeError berbahasa Indonesia."""
+    """Tempel ke terminal; login dari .env hanya kalau akun yang sedang login berbeda (login ulang membuat MT5
+    mematikan Algo Trading). -> account_info. Gagal -> RuntimeError berbahasa Indonesia."""
     import data
     mt5 = mt5 or modul()
     e = e or data.env()
-    if mt5.terminal_info() is not None and mt5.account_info() is not None \
-            and str(mt5.account_info().login) == e.get("MT5_LOGIN", ""):
-        return mt5.account_info()
+    path = {"path": e.get("MT5_PATH") or DEFAULT_PATH}
+    if mt5.terminal_info() is None:
+        mt5.initialize(timeout=30000, **path)
+    ai = mt5.account_info()
+    if ai is not None and (not e.get("MT5_LOGIN") or str(ai.login) == e["MT5_LOGIN"]):
+        return ai
     hilang = [k for k in ("MT5_LOGIN", "MT5_PASSWORD", "MT5_SERVER") if not e.get(k)]
     if hilang:
-        # tanpa kredensial di .env: menempel ke akun yang sudah login di terminal (password tersimpan di MT5)
-        kw = {"timeout": 30000, **({"path": e["MT5_PATH"]} if e.get("MT5_PATH") else {"path": DEFAULT_PATH})}
-        if mt5.initialize(**kw) and mt5.account_info() is not None:
-            return mt5.account_info()
         raise RuntimeError("MT5: terminal belum login. Login akun demo HFM di jendela MT5 (centang Save password), "
                            f"atau isi {', '.join(hilang)} di .env.")
-    kw = {"login": int(e["MT5_LOGIN"]), "password": e["MT5_PASSWORD"], "server": e["MT5_SERVER"], "timeout": 30000}
-    if e.get("MT5_PATH"):
-        kw["path"] = e["MT5_PATH"]
-    if not mt5.initialize(**kw):
+    kw = {"login": int(e["MT5_LOGIN"]), "password": e["MT5_PASSWORD"], "server": e["MT5_SERVER"], "timeout": 30000, **path}
+    if not mt5.initialize(**kw) or mt5.account_info() is None:
         raise RuntimeError(f"MT5: gagal login ke {e['MT5_SERVER']} ({mt5.last_error()}). Cek login/server dan terminal MT5.")
     return mt5.account_info()
 
@@ -67,16 +66,49 @@ def simbol_emas(e=None, mt5=None):
     return nama
 
 
+def offset_server(t):
+    """Selisih jam server HFM terhadap UTC pada waktu UTC t: GMT+3 saat DST AS, GMT+2 di luar itu
+    (server mengikuti penutupan New York = 00:00 server)."""
+    from regime import DST_US, _panas
+    return (3 if _panas(t, DST_US) else 2) * 3600
+
+
+def ke_server(t):
+    return int(t + offset_server(t))
+
+
+def cek_offset(nama, mt5=None):
+    """Bandingkan jam tick live dengan aturan offset; -> (offset terukur jam, cocok?) atau (None, True) tanpa tick."""
+    import time
+    mt5 = mt5 or modul()
+    tick = mt5.symbol_info_tick(nama)
+    if not tick or not tick.time or time.time() - (tick.time - offset_server(time.time())) > 3600:
+        return None, True   # pasar tutup / tick lama: tidak bisa diukur
+    ukur = round((tick.time - time.time()) / 3600)
+    return ukur, ukur * 3600 == offset_server(time.time())
+
+
 def candles(nama, tf, start, end=None, mt5=None):
-    """Candle broker [t, o, h, l, c, tick_volume] untuk [start, end) detik UTC."""
+    """Candle broker [t, o, h, l, c, tick_volume] untuk [start, end) detik UTC (jam server dikonversi ke UTC)."""
     mt5 = mt5 or modul()
     end = end or int(dt.datetime.now(dt.timezone.utc).timestamp()) + 60
-    f = lambda t: dt.datetime.fromtimestamp(t, dt.timezone.utc)
-    r = mt5.copy_rates_range(nama, getattr(mt5, TF[tf]), f(start), f(end))
-    if r is None:
-        raise OSError(f"MT5 copy_rates_range {nama} {tf}: {mt5.last_error()}")
-    return [[int(x["time"]), float(x["open"]), float(x["high"]), float(x["low"]), float(x["close"]),
-             float(x["tick_volume"])] for x in r]
+    f = lambda t: dt.datetime.fromtimestamp(ke_server(t), dt.timezone.utc)
+    out, a = [], start
+    while a < end:   # per potongan 20 hari: rentang besar sekaligus ditolak terminal ("Invalid params")
+        b = min(a + POTONG_HARI * 86400, end)
+        r = mt5.copy_rates_range(nama, getattr(mt5, TF[tf]), f(a), f(b))
+        if r is None:
+            if out or a > start:   # riwayat broker lebih pendek dari yang diminta: lewati potongan kosong
+                a = b
+                continue
+            raise OSError(f"MT5 copy_rates_range {nama} {tf}: {mt5.last_error()}")
+        for x in r:
+            ts = int(x["time"])
+            t = ts - offset_server(ts - 3 * 3600)
+            if not out or t > out[-1][0]:
+                out.append([t, float(x["open"]), float(x["high"]), float(x["low"]), float(x["close"]), float(x["tick_volume"])])
+        a = b
+    return out
 
 
 class Palsu:
@@ -99,6 +131,7 @@ class Palsu:
         self.login_ok = True
 
     def initialize(self, **kw):
+        self.init_kw = getattr(self, "init_kw", []) + [kw]
         return self.login_ok
 
     def terminal_info(self):
@@ -155,6 +188,7 @@ def _selftest():
     p = Palsu()
     e = {"MT5_LOGIN": "111", "MT5_PASSWORD": "x", "MT5_SERVER": "HFMarketsGlobal-Demo"}
     assert sambung(e, p).trade_mode == 0
+    assert not any("login" in kw for kw in getattr(p, "init_kw", [])), "akun sama: tidak boleh login ulang"
     assert sambung({}, Palsu(login=2)).login == 2           # tanpa .env: menempel ke akun yang login di terminal
     kosong = Palsu(login=3)
     kosong.login_ok = False
@@ -171,8 +205,11 @@ def _selftest():
     except RuntimeError as x:
         assert "gagal login" in str(x) and "x" not in str(x).split("(")[0].replace("MT5", "")
     assert simbol_emas({}, p) == "XAUUSD" and simbol_emas({"MT5_SYMBOL": "XAUUSD.b"}, p) == "XAUUSD.b"
-    c = candles("XAUUSD", "1m", 600, 900, p)
-    assert c[0] == [600, 1.0, 2.0, 0.5, 1.5, 7.0] and len(c) == 3, c
+    # Palsu mengembalikan bar mulai jam server dari permintaan; hasil harus kembali ke UTC
+    t0 = 1785715200   # 3 Agu 2026 (DST AS aktif, server GMT+3)
+    c = candles("XAUUSD", "1m", t0, t0 + 300, p)
+    assert c[0] == [t0, 1.0, 2.0, 0.5, 1.5, 7.0] and len(c) == 3, c
+    assert offset_server(t0) == 3 * 3600 and offset_server(1795000000) == 2 * 3600   # 1795000000 = Nov 2026
     print("selftest OK")
 
 

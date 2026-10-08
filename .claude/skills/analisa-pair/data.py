@@ -287,6 +287,10 @@ def load(pair, tfs, refresh=False, source="auto", spot=True):
     """{tf: candle}. Sumber Binance + spot=True: digeser ke spot, basisnya di load.basis."""
     sym = symbol(pair, source, oanda_creds() if source == "auto" else None)
     out = {tf: fetch(sym, tf, refresh) for tf in tfs}
+    if sym.startswith("MT5_"):  # H4/D1 broker mulai di jam server; disusun ulang dari H1 supaya sejajar UTC
+        for tf in ("4h", "1d"):
+            if tf in out:
+                out[tf] = aggregate([list(r) for r in fetch(sym, "1h", refresh)], STEP[tf])
     load.sym, load.basis = sym, None
     if spot and sym.startswith("BINANCE_") and pair.upper() in SPOT_URL:
         last = fetch(sym, "1m", refresh)[-1][4]
