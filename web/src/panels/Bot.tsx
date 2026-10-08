@@ -1,11 +1,131 @@
-import type { BotStatus, BotTrade } from '../lib/supabase'
-import { age, fmt, wibTime } from '../lib/format'
+import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import type { BotStatus, BotTrade, Setup, Side } from '../lib/supabase'
+import { age, fmt, kirimMt5, signed, wibTime } from '../lib/format'
 
 type R<T> = { rows: T[] | null; error: string | null }
 
 const MIGRASI = 'supabase/migrations/20261008020000_bot_mt5.sql'
 
-export function Bot({ status, trades }: { status: R<BotStatus>; trades: R<BotTrade> }) {
+type Posisi = { tiket: number; side: Side; lot: number; buka: number; sl: number; tp: number; profit: number; magic: number; komentar: string; waktu: number }
+type Order = { tiket: number; side: Side; jenis: 'limit' | 'stop' | 'lain'; lot: number; harga: number; sl: number; tp: number; magic: number; komentar: string; waktu: number }
+type Akun = {
+  akun: 'demo' | 'contest' | 'real'; login: number; saldo: number; ekuitas: number; mata_uang: string
+  harga: { bid: number; ask: number }; risiko: number; posisi: Posisi[]; order: Order[]
+}
+type Jawab = { ok: boolean; pesan?: string; lot?: number; rugi_di_sl?: number }
+const MAGIC: Record<number, string> = { 770078: 'EA', 770079: 'Web', 0: 'Manual' }
+const KOSONG = { side: 'buy' as Side, entry: '', sl: '', tp: '', lot: '' }
+
+// Posisi dan order langsung dari MT5 lewat jembatan lokal, plus tombol tutup dan pasang limit.
+function KontrolMt5({ setup, off }: { setup?: Setup | null; off: number }) {
+  const [a, setA] = useState<Akun | null>(null)
+  const [putus, setPutus] = useState(false)
+  const [buka, setBuka] = useState(false)
+  const [f, setF] = useState(KOSONG)
+  const [kirim, setKirim] = useState(false)
+  const [hasil, setHasil] = useState<{ ok: boolean; teks: string } | null>(null)
+
+  const muat = useCallback(() => fetch('/mt5/akun/posisi').then((r) => (r.ok ? r.json() : Promise.reject()))
+    .then((x: Akun) => { setA(x); setPutus(false) }, () => setPutus(true)), [])
+  useEffect(() => {
+    muat()
+    const t = setInterval(muat, 5000)
+    return () => clearInterval(t)
+  }, [muat])
+
+  const AKUN = a?.akun.toUpperCase() ?? ''
+  const mati = putus || !a || kirim
+  const pctRisiko = a ? +(a.risiko * 100).toFixed(2) : '–'
+  const jalankan = async (tanya: string, path: string, body: unknown, ok: (j: Jawab) => string) => {
+    if (!confirm(tanya)) return
+    setKirim(true); setHasil(null)
+    try {
+      setHasil({ ok: true, teks: ok(await kirimMt5<Jawab>(path, body)) })
+    } catch (e) {
+      setHasil({ ok: false, teks: (e as Error).message })
+    } finally { setKirim(false); muat() }
+  }
+  const tutupPosisi = (p: Posisi) => jalankan(
+    `Tutup posisi ${p.side.toUpperCase()} ${p.lot} lot @ ${fmt(p.buka, 2)} (tiket ${p.tiket}) di akun ${AKUN}?`,
+    '/order/close', { tiket: p.tiket }, (j) => j.pesan ?? 'Posisi ditutup.')
+  const batalOrder = (o: Order) => jalankan(
+    `Batalkan order ${o.side.toUpperCase()} ${o.jenis.toUpperCase()} ${o.lot} lot @ ${fmt(o.harga, 2)} (tiket ${o.tiket}) di akun ${AKUN}?`,
+    '/order/close', { tiket: o.tiket }, (j) => j.pesan ?? 'Order dibatalkan.')
+  const tutupSemua = () => a && jalankan(
+    `Tutup ${a.posisi.length} posisi dan hapus ${a.order.length} order di akun ${AKUN}?`,
+    '/order/close-all', {}, (j) => j.pesan ?? 'Selesai.')
+  const pasang = (e: FormEvent) => {
+    e.preventDefault()
+    const lot = f.lot.trim() ? Number(f.lot) : null
+    const body = { side: f.side, entry: Number(f.entry), sl: Number(f.sl), tp: Number(f.tp), lot }
+    jalankan(
+      `Pasang ${f.side.toUpperCase()} LIMIT di akun ${AKUN}?\nEntry ${fmt(body.entry, 2)}, SL ${fmt(body.sl, 2)}, TP ${fmt(body.tp, 2)}, lot ${lot ?? `otomatis (${pctRisiko}% saldo)`}.`,
+      '/order/limit', body, (j) => `${j.pesan ?? 'Order terpasang.'} Lot ${j.lot ?? '–'}, rugi di SL ${fmt(j.rugi_di_sl, 2)} ${a?.mata_uang ?? ''}.`)
+  }
+  // harga setup dalam spot XAU; ditambah selisih broker seperti yang tampil di kartu Setup
+  const isiSetup = () => setup && setF({
+    ...f, side: setup.side,
+    entry: (setup.entry + off).toFixed(2), sl: (setup.sl + off).toFixed(2), tp: setup.tp?.[0] != null ? (setup.tp[0] + off).toFixed(2) : '',
+  })
+  const ubah = (k: 'entry' | 'sl' | 'tp' | 'lot') => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value })
+
+  return (
+    <div className="bot-ctl">
+      <div className="bot-top">
+        <h3>Posisi & order di MT5</h3>
+        {a && <span className={`bot-akun ${a.akun === 'real' ? 'real' : ''}`}>{a.akun === 'real' ? 'AKUN REAL' : AKUN}</span>}
+      </div>
+      {putus && <p className="setup-state off" role="alert">Kontrol MT5 butuh jembatan MT5 (mulai_trading.bat)</p>}
+      {!a && !putus && <p className="sub">Memuat posisi MT5.</p>}
+      {a && (!a.posisi.length && !a.order.length ? <p className="sub">Tidak ada posisi atau order terbuka.</p> : (
+        <ul className="log log2 posisi">
+          {a.posisi.map((p) => (
+            <li key={`p${p.tiket}`}>
+              <span className={p.side === 'sell' ? 'down' : 'up'}>{p.side.toUpperCase()}</span>
+              <span className="num">{p.lot} lot @ {fmt(p.buka, 2)}</span>
+              <span className={`num ${p.profit > 0 ? 'up' : p.profit < 0 ? 'down' : 'flat'}`}>{signed(p.profit, 2)}</span>
+              <button type="button" className="theme-btn" disabled={mati} onClick={() => tutupPosisi(p)}>Tutup</button>
+              <span className="sub ket">Posisi · SL {fmt(p.sl, 2)} · TP {fmt(p.tp, 2)} · {MAGIC[p.magic] ?? p.magic}</span>
+            </li>
+          ))}
+          {a.order.map((o) => (
+            <li key={`o${o.tiket}`}>
+              <span className={o.side === 'sell' ? 'down' : 'up'}>{o.side.toUpperCase()}</span>
+              <span className="num">{o.jenis.toUpperCase()} {o.lot} lot @ {fmt(o.harga, 2)}</span>
+              <span className="sub">Order</span>
+              <button type="button" className="theme-btn" disabled={mati} onClick={() => batalOrder(o)}>Batalkan</button>
+              <span className="sub ket">SL {fmt(o.sl, 2)} · TP {fmt(o.tp, 2)} · {MAGIC[o.magic] ?? o.magic}</span>
+            </li>
+          ))}
+        </ul>
+      ))}
+      <div className="bot-top">
+        <button type="button" className="theme-btn" aria-expanded={buka} disabled={putus || !a} onClick={() => setBuka(!buka)}>Set limit</button>
+        <button type="button" className="theme-btn bahaya" disabled={!a || mati || (!a.posisi.length && !a.order.length)} onClick={tutupSemua}>Close all</button>
+      </div>
+      {buka && (
+        <form className="form-limit" onSubmit={pasang}>
+          <div className="seg" role="group" aria-label="Jenis order">
+            {(['buy', 'sell'] as const).map((x) => (
+              <button key={x} type="button" aria-pressed={f.side === x} onClick={() => setF({ ...f, side: x })}>{x.toUpperCase()} LIMIT</button>
+            ))}
+          </div>
+          <label>Entry<input type="number" step="0.01" inputMode="decimal" required value={f.entry} onChange={ubah('entry')} /></label>
+          <label>Stop loss<input type="number" step="0.01" inputMode="decimal" required value={f.sl} onChange={ubah('sl')} /></label>
+          <label>Take profit<input type="number" step="0.01" inputMode="decimal" required value={f.tp} onChange={ubah('tp')} /></label>
+          <label>Lot<input type="number" step="0.01" min="0.01" inputMode="decimal" placeholder={`otomatis ${pctRisiko}% saldo`} value={f.lot} onChange={ubah('lot')} /></label>
+          <div className="bot-top">
+            <button type="button" className="theme-btn" disabled={!setup} onClick={isiSetup}>Isi dari setup aktif</button>
+            <button type="submit" className="theme-btn" disabled={mati}>{kirim ? 'Mengirim' : 'Pasang limit di MT5'}</button>
+          </div>
+        </form>
+      )}
+      {hasil && <p className={`setup-state ${hasil.ok ? '' : 'off'}`} role={hasil.ok ? 'status' : 'alert'}>{hasil.teks}</p>}
+    </div>
+  )
+}
+
+export function Bot({ status, trades, setup, off = 0 }: { status: R<BotStatus>; trades: R<BotTrade>; setup?: Setup | null; off?: number }) {
   const s = status.rows?.[0]
   const mati = s ? Date.now() - Date.parse(s.updated_at) > 3 * 60e3 : true
   const selesai = (trades.rows ?? []).filter((t) => t.akun === 'demo' && ['TP', 'SL', 'BE'].includes(t.status))
@@ -55,6 +175,7 @@ export function Bot({ status, trades }: { status: R<BotStatus>; trades: R<BotTra
     <section className="card" aria-labelledby="botTitle">
       <div className="card-head"><h2 id="botTitle">Bot MT5</h2>{s && <span className="sub">{wibTime(s.updated_at)}</span>}</div>
       {isi}
+      <KontrolMt5 setup={setup} off={off} />
     </section>
   )
 }

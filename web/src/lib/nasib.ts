@@ -2,11 +2,11 @@ import type { Setup } from './supabase'
 
 type Bar = { time: number; open: number; high: number; low: number; close: number }
 export type Nasib = {
-  status: 'menunggu' | 'berjalan' | 'TP1' | 'SL' | 'invalid' | 'batal' | 'kedaluwarsa'
+  status: 'menunggu' | 'berjalan' | 'TP1' | 'SL' | 'invalid' | 'batal' | 'kedaluwarsa' | 'dibatalkan'
   alasan: string; t: number | null   // t = waktu kejadian (detik UTC)
 }
 export type Jejak = { s: Setup; t0: number; n: Nasib; terbaru: boolean }
-export const SELESAI = new Set(['TP1', 'SL', 'invalid', 'batal', 'kedaluwarsa'])
+export const SELESAI = new Set(['TP1', 'SL', 'invalid', 'batal', 'kedaluwarsa', 'dibatalkan'])
 const BATAL_FRAC = 0.7
 const UMUR = 24 * 3600
 
@@ -34,3 +34,6 @@ export function nasib(s: Setup, t0: number, bars: Bar[], now = Date.now() / 1000
   if (now - t0 > UMUR) return { status: 'kedaluwarsa', alasan: 'lewat 24 jam tanpa entry', t: null }
   return { status: 'menunggu', alasan: '', t: null }
 }
+
+// Kunci dedupe setup, sama dengan kunci pembatalan di jembatan MT5.
+export const kunci = (s: Setup) => `${s.side}:${Math.round(s.entry * 10)}`

@@ -1,6 +1,7 @@
+import { useState } from 'react'
 import type { LogRow, Setup } from '../lib/supabase'
-import type { Jejak, Nasib } from '../lib/nasib'
-import { fmt, waktuPendek, wibTime } from '../lib/format'
+import { kunci, type Jejak, type Nasib } from '../lib/nasib'
+import { fmt, kirimMt5, waktuPendek, wibTime } from '../lib/format'
 
 // Near = live price within 0.5 x (zone height + $6) of the zone midpoint, i.e. inside or within $3 of an edge.
 const NEAR_PAD = 6
@@ -37,7 +38,10 @@ function keadaan(s: Setup, price: number | null, off: number, n?: Nasib) {
   return { text: 'Harga sudah lewat zona, belum kena stop loss. Jangan kejar.', kind: 'wait' }
 }
 
-type Props = { aktif: Jejak[]; riwayat: Jejak[]; idx: number; onPick: (i: number) => void; off: number; price: number | null; log: LogRow[] | null }
+type Props = {
+  aktif: Jejak[]; riwayat: Jejak[]; idx: number; onPick: (i: number) => void; off: number; price: number | null; log: LogRow[] | null
+  onBatal: () => void   // muat ulang peta pembatalan setelah POST berhasil
+}
 
 // Ringkasan forward test nyata satu strategi dari setup_log.
 function live(log: LogRow[] | null, strategi?: string) {
@@ -48,8 +52,21 @@ function live(log: LogRow[] | null, strategi?: string) {
   return `Live: ${done.length} setup selesai, ${tp} kena TP, total ${r >= 0 ? '+' : ''}${r.toFixed(1)}R.`
 }
 
-export function Setups({ aktif, riwayat, idx, onPick, off, price, log }: Props) {
+export function Setups({ aktif, riwayat, idx, onPick, off, price, log, onBatal }: Props) {
   const setups = aktif.map((j) => j.s)
+  const [kirim, setKirim] = useState<string | null>(null)
+  const [gagal, setGagal] = useState<{ k: string; pesan: string } | null>(null)
+  const batalkan = async (s: Setup, n: Nasib) => {
+    const k = kunci(s)
+    if (!confirm(`Batalkan setup ${s.side.toUpperCase()} ${fmt(s.entry + off, 2)}? Setup pindah ke Riwayat sebagai Dibatalkan. Order di MT5 tidak ikut ditutup.`)) return
+    setKirim(k); setGagal(null)
+    try {
+      await kirimMt5('/setup/batal', { kunci: k, berjalan: n.status === 'berjalan' })
+      onBatal()
+    } catch (e) {
+      setGagal({ k, pesan: (e as Error).message })
+    } finally { setKirim(null) }
+  }
   return (
     <>
       {!setups.length && (
@@ -89,6 +106,10 @@ export function Setups({ aktif, riwayat, idx, onPick, off, price, log }: Props) 
                 {shown ? 'Sedang tampil di chart' : 'Tampilkan di chart'}
               </button>
             )}
+            <button type="button" className="theme-btn" disabled={kirim === kunci(s)} onClick={() => batalkan(s, aktif[i].n)}>
+              {kirim === kunci(s) ? 'Membatalkan' : 'Batalkan setup'}
+            </button>
+            {gagal?.k === kunci(s) && <p className="setup-state off" role="alert">Gagal membatalkan: {gagal.pesan}</p>}
           </article>
         )
       })}
@@ -98,6 +119,7 @@ export function Setups({ aktif, riwayat, idx, onPick, off, price, log }: Props) 
 
 const STATUS: Record<string, [string, string]> = {
   TP1: ['TP1', 'up'], SL: ['Kena SL', 'down'], invalid: ['Invalid', 'sub'], batal: ['Batal', 'sub'], kedaluwarsa: ['Kedaluwarsa', 'sub'],
+  dibatalkan: ['Dibatalkan', 'sub manual'],
 }
 
 // Setup yang sudah selesai atau gugur, terbaru di atas.

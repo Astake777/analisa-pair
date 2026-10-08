@@ -49,3 +49,16 @@ export function marketOpen(now = new Date()) {
   if (d === 5) return h < 21
   return true
 }
+
+// POST ke jembatan MT5 lewat proxy Vite (token disisipkan proxy). Gagal -> Error berisi pesan jembatan.
+export async function kirimMt5<T = { ok: boolean; pesan?: string }>(path: string, body: unknown): Promise<T> {
+  let r: Response
+  try {
+    r = await fetch(`/mt5${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+  } catch {
+    throw new Error('Jembatan MT5 tidak tersambung. Jalankan mulai_trading.bat.')
+  }
+  const j = await r.json().catch(() => null)
+  if (!r.ok || !j?.ok) throw new Error(j?.pesan ?? `Jembatan MT5 tidak menjawab (HTTP ${r.status}).`)
+  return j as T
+}

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Chart from './chart/Chart'
 import type { Band } from './chart/zones'
 import { TFS, useLiveFeed, type TF } from './feed'
@@ -11,7 +11,8 @@ import { Menjelang, Outlook } from './panels/Outlook'
 import { RekamJejak, Setups } from './panels/Setups'
 import { Kinerja } from './panels/Kinerja'
 import { Bot } from './panels/Bot'
-import { nasib, SELESAI, type Jejak } from './lib/nasib'
+import { Mikro } from './panels/Mikro'
+import { kunci, nasib, SELESAI, type Jejak } from './lib/nasib'
 
 const PAIR = 'XAUUSD'
 const MODES: Mode[] = ['scalp', 'intraday', 'swing']
@@ -44,6 +45,20 @@ function useEvalBars(cadangan: Bar[]) {
     return () => { hidup = false; clearInterval(t) }
   }, [])
   return bars ?? cadangan
+}
+
+// Setup yang dibatalkan manual (disimpan jembatan MT5). Gagal ambil -> peta terakhir tetap dipakai.
+type Batal = Record<string, { waktu: number; berjalan: boolean }>
+function useBatal() {
+  const [map, setMap] = useState<Batal>({})
+  const ambil = useCallback(() => fetch('/mt5/setup/batal').then((r) => (r.ok ? r.json() : Promise.reject()))
+    .then((m: Batal) => setMap(m ?? {}), () => {}), [])
+  useEffect(() => {
+    ambil()
+    const t = setInterval(ambil, 30000)
+    return () => clearInterval(t)
+  }, [ambil])
+  return [map, ambil] as const
 }
 
 // Dua bunyi pendek; tanpa file audio.
@@ -154,20 +169,27 @@ export default function App() {
   const a = latest?.payload ?? null
   const akey = latest ? `${latest.id ?? ''}${latest.created_at}` : ''
   const evalBars = useEvalBars(feed.bars)
+  const [batal, muatBatal] = useBatal()
   // Setup dari 20 analisis terakhir (duplikat side+entry disatukan, waktu paling awal), dinilai dari jalur harga sejak dibuat.
   const jejak = useMemo<Jejak[]>(() => {
     const rows = an.rows ?? [], seen = new Map<string, Jejak>(), now = Date.now() / 1000
     for (let r = rows.length - 1; r >= 0; r--) {
       const t0 = Date.parse(rows[r].payload.updatedAt || rows[r].created_at) / 1000
       for (const s of rows[r].payload.setups ?? []) {
-        const k = `${s.side}:${Math.round(s.entry * 10)}`
+        const k = kunci(s)
         const ada = seen.get(k)
         if (ada) { if (r === 0) Object.assign(ada, { s, terbaru: true }); continue }
         seen.set(k, { s, t0, n: { status: 'menunggu', alasan: '', t: null }, terbaru: r === 0 })
       }
     }
-    return [...seen.values()].map((j) => ({ ...j, n: nasib(j.s, j.t0, evalBars, now, off) }))
-  }, [an.rows, evalBars, off])
+    return [...seen.values()].map((j): Jejak => {
+      const n = nasib(j.s, j.t0, evalBars, now, off), b = batal[kunci(j.s)]
+      // pembatalan menang kalau setup belum selesai saat tombol ditekan
+      if (!b || !(n.status === 'menunggu' || n.status === 'berjalan' || (n.t != null && n.t > b.waktu))) return { ...j, n }
+      const jam = wibTime(new Date(b.waktu * 1000).toISOString(), false).slice(0, 5)
+      return { ...j, n: { status: 'dibatalkan', alasan: `dibatalkan manual ${jam} WIB${b.berjalan ? ' saat posisi berjalan' : ''}`, t: b.waktu } }
+    })
+  }, [an.rows, evalBars, off, batal])
   const aktif = useMemo(() => jejak.filter((j) => j.terbaru && !SELESAI.has(j.n.status)), [jejak])
   const riwayat = useMemo(() => jejak.filter((j) => SELESAI.has(j.n.status))
     .sort((x, y) => (y.n.t ?? y.t0) - (x.n.t ?? x.t0)).slice(0, 10), [jejak])
@@ -211,7 +233,7 @@ export default function App() {
   }
 
   // Zoom <= 85%: Bot MT5 dan kartu kinerja di kolom paling kanan; zoom 90-100%: urutan lama di satu kolom kanan.
-  const botDst = <Bot status={bot.status} trades={bot.trades} />
+  const botDst = <Bot status={bot.status} trades={bot.trades} setup={setup} off={off} />
   const rekamDst = (
     <>
       {lebar && <Kinerja />}
@@ -365,7 +387,7 @@ export default function App() {
                 <p>Jalankan <code>/analisa-pair {PAIR} {mode}</code> di Claude Code. Hasilnya langsung muncul di sini.</p>
               </div>
             ) : (
-              <Setups aktif={aktif} riwayat={riwayat} idx={idx} onPick={(i) => setPick({ key: akey, idx: i })} off={off} price={feed.last} log={log.rows} />
+              <Setups aktif={aktif} riwayat={riwayat} idx={idx} onPick={(i) => setPick({ key: akey, idx: i })} off={off} price={feed.last} log={log.rows} onBatal={muatBatal} />
             )}
           </section>
           {!lebar && botDst}
@@ -379,7 +401,10 @@ export default function App() {
       </div>
 
       <div className="lower">
-        {macro.rows && <Makro rows={macro.rows} />}
+        <div className="duo full">
+          {macro.rows && <Makro rows={macro.rows} />}
+          <Mikro />
+        </div>
         <section className="card full" aria-labelledby="drvTitle">
           <div className="card-head">
             <h2 id="drvTitle">Aset pendukung</h2>

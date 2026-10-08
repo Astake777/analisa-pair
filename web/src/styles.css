@@ -333,3 +333,19 @@ tr.det > td { padding: 4px 0 12px; }
 .log2 li { grid-template-columns: 40px 1fr auto; row-gap: 2px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
 .log2 li:last-child { border-bottom: 0; }
 .log2 .ket { grid-column: 2 / -1; font-size: 12px; }
+/* Makro + Mikro berdampingan; kalau Makro kosong, Mikro selebar baris */
+.duo > :only-child { grid-column: 1 / -1; }
+.sesi-jalan { margin-left: 6px; }
+/* tombol sekunder di kartu setup dan kontrol MT5 */
+.setup .theme-btn { justify-self: start; }
+.theme-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.theme-btn.bahaya { color: var(--down); border-color: var(--down); }
+.log .manual { font-style: italic; font-weight: 400; }
+.bot-ctl { display: grid; gap: 10px; border-top: 1px solid var(--line); margin-top: 12px; padding-top: 12px; }
+.bot-ctl h3 { font-size: 14px; color: var(--ink-strong); }
+.bot-ctl .setup-state { margin: 0; font-size: 13px; }
+.log2.posisi li { grid-template-columns: 40px 1fr auto auto; align-items: center; }
+.form-limit { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.form-limit .seg, .form-limit .bot-top { grid-column: 1 / -1; }
+.form-limit label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
+.form-limit input { width: 100%; min-height: var(--tap); padding: 4px 8px; border-radius: var(--r-md); border: 1px solid var(--line); background: var(--card); color: var(--ink); font-family: var(--font-num); }

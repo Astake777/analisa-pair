@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import react from '@vitejs/plugin-react'
 import { defineConfig, loadEnv, type ProxyOptions } from 'vite'
 
@@ -17,9 +18,12 @@ export default defineConfig(({ mode }) => {
     headers: { 'User-Agent': 'Mozilla/5.0' },
     rewrite: (p) => p.replace(/^\/yahoo/, ''),
   }
-  // Jembatan MT5 lokal (jembatan_mt5.py) untuk harga broker HFM.
+  // Jembatan MT5 lokal (jembatan_mt5.py) untuk harga broker HFM. Token POST disisipkan di sini, browser tidak pernah memegangnya.
+  let jembatan = ''
+  try { jembatan = readFileSync(new URL('../data/jembatan_token.txt', import.meta.url), 'utf8').trim() } catch { /* token belum dibuat */ }
   const mt5: ProxyOptions = {
     target: 'http://127.0.0.1:5181',
+    ...(jembatan ? { headers: { 'X-Jembatan-Token': jembatan } } : {}),
     rewrite: (p) => p.replace(/^\/mt5/, ''),
   }
   const proxy: Record<string, ProxyOptions> = enabled
