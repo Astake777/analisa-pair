@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { FIXTURE, type BacktestRow, type Payload } from '../lib/supabase'
+import { FIXTURE, type Analysis, type BacktestRow, type Payload } from '../lib/supabase'
 import { dirClass, fmt, signed, wibTime } from '../lib/format'
 
 export function PrediksiNews({ items }: { items: NonNullable<Payload['prediksiNews']> }) {
@@ -220,5 +220,29 @@ export function Amd({ amd, off, bare = false }: { amd: NonNullable<Payload['amd'
       </dl>
       {amd.catatan && <p className="sub" style={{ margin: '10px 0 0' }}>{amd.catatan}</p>}
     </Bungkus>
+  )
+}
+
+export function RiwayatAnalisis({ rows, off }: { rows: Analysis[] | null; off: number }) {
+  return <Bungkus bare={false} judul="Riwayat analisis" id="histTitle"><DaftarAnalisis rows={rows} off={off} /></Bungkus>
+}
+
+function DaftarAnalisis({ rows, off }: { rows: Analysis[] | null; off: number }) {
+  if (rows == null) return <p className="sub">Memuat riwayat analisis.</p>
+  if (!rows.length) return <p className="sub">Belum ada riwayat untuk pair dan mode ini.</p>
+  return (
+    <ul className="log">
+      {rows.slice(0, 15).map((h, i) => {
+        const s = h.payload.setups?.[0]
+        return (
+          <li key={h.id ?? i} title={s ? `SL ${fmt(s.sl + off)} · TP ${s.tp?.map((t) => fmt(t + off)).join(' / ') ?? '–'} · keyakinan ${h.keyakinan ?? '–'}` : `keyakinan ${h.keyakinan ?? '–'}`}>
+            <span className={s?.side === 'sell' ? 'down' : s?.side === 'buy' ? 'up' : 'sub'}>{s ? s.side.toUpperCase() : '–'}</span>
+            <span className="num">{s ? fmt(s.entry + off, 2) : '–'}</span>
+            <span className="sub">{wibTime(h.created_at)}</span>
+            <span className="sub">{h.status}</span>
+          </li>
+        )
+      })}
+    </ul>
   )
 }

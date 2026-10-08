@@ -53,7 +53,7 @@ export function Setups({ aktif, riwayat, idx, onPick, off, price, log }: Props) 
   return (
     <>
       {!setups.length && (
-        <p className="sub">{riwayat.length ? 'Belum ada setup aktif. Setup sebelumnya ada di Riwayat & kinerja, tab Setup.' : 'Belum ada setup. Sistem mengabari begitu zona yang memenuhi syarat muncul.'}</p>
+        <p className="sub">{riwayat.length ? 'Belum ada setup aktif. Setup sebelumnya ada di kartu Riwayat setup.' : 'Belum ada setup. Sistem mengabari begitu zona yang memenuhi syarat muncul.'}</p>
       )}
       {setups.map((s, i) => {
         const shown = i === idx

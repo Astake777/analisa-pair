@@ -326,9 +326,3 @@ tr.det > td { padding: 4px 0 12px; }
 
 
 
-/* panel Riwayat & kinerja: tab di atas, judul bagian kecil di dalam tab */
-.rekap-tabs { margin-bottom: 14px; }
-.rekap-isi h3 { margin: 0 0 8px; font-size: 13px; font-weight: 700; color: var(--muted); }
-.rekap-isi h3 + * + h3, .rekap-isi .log + h3, .rekap-isi div + h3, .rekap-isi p + h3 { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--line); }
-.tab-isi > .seg { margin-bottom: 12px; }
-.tab-sisi { margin-bottom: 8px; }

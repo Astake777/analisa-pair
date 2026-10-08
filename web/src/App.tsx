@@ -5,11 +5,11 @@ import { TFS, useLiveFeed, type TF } from './feed'
 import { useLiveDrivers } from './feed/yahoo'
 import { age, fmt, marketOpen, signed, statusKind, store, wibTime } from './lib/format'
 import { FIXTURE, useAnalyses, useBot, useSetupLog, useBacktest, useMacro, useNewsOutlook, type Mode } from './lib/supabase'
-import { Bias, Calendar, Headlines, Levels, Notes, PrediksiNews, Strategi } from './panels/Analysis'
+import { Amd, Bias, Bungkus, Calendar, Headlines, Levels, Notes, PrediksiNews, RiwayatAnalisis, Strategi } from './panels/Analysis'
 import { ASET, Drivers, Makro } from './panels/Drivers'
 import { Menjelang, Outlook } from './panels/Outlook'
-import { Setups } from './panels/Setups'
-import { Rekap } from './panels/Rekap'
+import { RekamJejak, Riwayat, Setups } from './panels/Setups'
+import { Kinerja } from './panels/Kinerja'
 import { Bot } from './panels/Bot'
 import { nasib, SELESAI, type Jejak } from './lib/nasib'
 
@@ -317,6 +317,7 @@ export default function App() {
                 <Levels a={a} off={off} price={spot} />
               </div>
               <Calendar events={a.events ?? []} />
+              <Strategi s={a.strategi} rows={bt.rows} error={bt.error} />
             </>
           )}
         </div>
@@ -344,14 +345,17 @@ export default function App() {
             )}
           </section>
           <Bot status={bot.status} trades={bot.trades} />
-          <Rekap riwayat={riwayat} off={off} log={log.rows} logError={log.error} amd={a?.amd} analisis={an.rows} />
+          <Bungkus bare={false} judul="Riwayat setup" id="riwTitle"><Riwayat rows={riwayat} off={off} /></Bungkus>
+          <Bungkus bare={false} judul="Rekam jejak live" id="logTitle"><RekamJejak rows={log.rows} error={log.error} /></Bungkus>
+          <Kinerja />
+          {a?.amd && <Amd amd={a.amd} off={off} />}
+          <RiwayatAnalisis rows={an.rows} off={off} />
           {a && <Headlines items={a.headlines ?? []} />}
           {a && <Notes notes={a.notes ?? []} />}
         </aside>
       </div>
 
       <div className="lower">
-        {a && <div className="full"><Strategi s={a.strategi} rows={bt.rows} error={bt.error} /></div>}
         {macro.rows && <Makro rows={macro.rows} />}
         <section className="card full" aria-labelledby="drvTitle">
           <div className="card-head">
