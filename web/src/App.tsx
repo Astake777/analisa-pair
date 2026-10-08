@@ -98,6 +98,28 @@ export default function App() {
     if (hasNotif && Notification.permission === 'granted') new Notification('Setup sniper XAUUSD', { body: text })
   }, [an.rows, mode])
 
+  // kabar bot: order baru, terisi, atau selesai (tabel bot_trades realtime)
+  const botSeen = useRef<Map<string, string> | null>(null)
+  useEffect(() => {
+    const rows = bot.trades.rows
+    if (!rows) return
+    const awal = botSeen.current === null
+    const seen = botSeen.current ?? new Map<string, string>()
+    const berubah = rows.filter((t) => seen.get(t.id) !== t.status)
+    rows.forEach((t) => seen.set(t.id, t.status))
+    botSeen.current = seen
+    if (awal || !berubah.length) return
+    const t = berubah[0]
+    const apa = t.status === 'PENDING' ? `pasang ${t.side.toUpperCase()} LIMIT ${t.lot} lot @ ${fmt(t.entry, 2)}`
+      : t.status === 'TERBUKA' ? `order terisi ${t.side.toUpperCase()} ${t.lot} lot @ ${fmt(t.harga_isi ?? t.entry, 2)}`
+      : `${t.side.toUpperCase()} ${fmt(t.entry, 2)} selesai: ${t.status}${t.pl != null ? `, P/L ${fmt(t.pl, 2)}` : ''}`
+    const text = `Bot MT5 ${apa}. SL ${fmt(t.sl, 2)}, TP ${fmt(t.tp, 2)}.`
+    setKabar(text)
+    bunyi()
+    if (hasNotif && Notification.permission === 'granted') new Notification('Bot MT5 XAUUSD', { body: text })
+  }, [bot.trades.rows])
+  const botTerbuka = useMemo(() => bot.status.rows?.[0]?.terbuka ?? [], [bot.status.rows])
+
   const latest = an.rows?.[0] ?? null
   const a = latest?.payload ?? null
   const akey = latest ? `${latest.id ?? ''}${latest.created_at}` : ''
@@ -179,7 +201,7 @@ export default function App() {
 
       {kabar && (
         <div className="kabar" role="alert">
-          <span><b>Setup sniper baru:</b> {kabar}</span>
+          <span>{kabar.startsWith('Bot MT5') ? kabar : <><b>Setup sniper baru:</b> {kabar}</>}</span>
           <button type="button" className="theme-btn" onClick={() => setKabar(null)}>Tutup</button>
         </div>
       )}
@@ -223,7 +245,7 @@ export default function App() {
               </div>
             </div>
             <Chart
-              bars={feed.bars} shift={off} setup={setup} zones={zones} levels={a?.levels ?? NO_LEVELS}
+              bars={feed.bars} shift={off} setup={setup} zones={zones} levels={a?.levels ?? NO_LEVELS} bot={botTerbuka}
               emptyText={feed.status === 'error' ? 'Feed harga belum tersambung' : 'Memuat harga live'}
             />
             <div className="legend">

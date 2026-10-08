@@ -16,7 +16,10 @@ type Props = {
   zones: Band[]
   levels: { price: number; label: string; kind: string }[]
   emptyText: string
+  bot?: { side: string; lot: number; entry: number; sl: number; tp: number; status: string }[]
 }
+const NO_BOT: NonNullable<Props['bot']> = []
+
 type Api = {
   chart: IChartApi; candles: ISeriesApi<'Candlestick'>
   e20: ISeriesApi<'Line'>; e50: ISeriesApi<'Line'>; e200: ISeriesApi<'Line'>; prim: ZoneBands
@@ -45,7 +48,7 @@ export function keyLevels(levels: Level[], ref: number | undefined, setup: Setup
   return [...pemicu, ...near(sr.filter((l) => l.price > ref)), ...near(sr.filter((l) => l.price <= ref))]
 }
 
-export default function Chart({ bars, shift, setup, zones, levels, emptyText }: Props) {
+export default function Chart({ bars, shift, setup, zones, levels, emptyText, bot = NO_BOT }: Props) {
   const box = useRef<HTMLDivElement>(null)
   const api = useRef<Api | null>(null)
   const lines = useRef<IPriceLine[]>([])
@@ -156,9 +159,17 @@ export default function Chart({ bars, shift, setup, zones, levels, emptyText }: 
       add(setup.sl, css('--down'), 'SL', LineStyle.Dashed)
       setup.tp?.forEach((tp, i) => add(tp, css('--up'), `TP${i + 1}`, LineStyle.Dashed))
     }
-    extras.current = setup ? [setup.entry, setup.sl, ...(setup.tp ?? [])].filter((v) => v != null).map((v) => v + shift) : []
+    // order/posisi bot MT5 di atas garis setup, supaya selalu terlihat apa yang benar-benar dipasang
+    for (const o of bot) {
+      const jenis = o.status === 'PENDING' ? `${o.side.toUpperCase()} LIMIT` : o.side.toUpperCase()
+      add(o.entry, css('--accent'), `Bot ${jenis} ${o.lot}`, LineStyle.Solid)
+      add(o.sl, css('--down'), 'Bot SL', LineStyle.Dotted)
+      add(o.tp, css('--up'), 'Bot TP', LineStyle.Dotted)
+    }
+    extras.current = [...(setup ? [setup.entry, setup.sl, ...(setup.tp ?? [])] : []), ...bot.flatMap((o) => [o.entry, o.sl, o.tp])]
+      .filter((v) => v != null).map((v) => v + shift)
     a.chart.priceScale('right').applyOptions({ autoScale: true })
-  }, [setup, levels, shift, themeRev, bars.length > 0])
+  }, [setup, levels, shift, themeRev, bars.length > 0, bot])
 
   // Label harga terakhir + hitung mundur candle dalam satu kotak di sumbu kanan, supaya tidak pernah terpisah.
   const tickRef = useRef<() => void>(() => {})

@@ -81,6 +81,31 @@ def tren_pullback(mode):
             "sumber": f"OOS {OOS_DAYS} hari terakhir backtest.py", **metrik(tr, t1 - OOS_DAYS * 86400, t1)}
 
 
+def bot_hfm():
+    """Sniper dengan aturan bot di data HFM dari backtest_bot.py terbaru (seluruh sampel, dalam dollar)."""
+    f = terbaru(os.path.join(BT, "bot_*.json"))
+    if not f:
+        return None
+    rep = json.load(open(f, encoding="utf-8"))
+    h = rep["hasil"].get("sniper")
+    if not h or not h["kurva"]:
+        return None
+    modal, kurva = rep["modal"], [[rep["dari"], rep["modal"]]] + h["kurva"]
+    tr, prev = [], modal
+    for t, eq in h["kurva"]:   # r_net setara: perubahan ekuitas dibagi risiko yang dipakai
+        tr.append({"masuk": t, "keluar": t, "r_net": (eq / prev - 1) / rep["risiko"]})
+        prev = eq
+    global RISIKO, MODAL
+    lama = RISIKO, MODAL
+    RISIKO, MODAL = rep["risiko"], modal
+    m = metrik(tr, rep["dari"], rep["sampai"])
+    RISIKO, MODAL = lama
+    m["kurva"] = kurva
+    return {"nama": "Bot HFM", "status": "aturan bot, data broker",
+            "sumber": "backtest_bot.py: data HFM, lot dibulatkan 0.01, batas harian, jendela news, seluruh sampel (bukan OOS)",
+            **m}
+
+
 def _selftest():
     D = 86400
     tr = [{"masuk": i * D, "keluar": i * D + 3600, "r_net": 3.0 if i % 2 else -1.0} for i in range(10)]
@@ -108,7 +133,7 @@ def main():
            "mataUang": MATA_UANG, "modal": MODAL,
            "asumsi": f"Modal {MODAL:,.0f} {MATA_UANG}{' (akun cent, = $' + format(MODAL / 100, ',.0f') + ')' if MATA_UANG == 'USC' else ''}, risiko {RISIKO * 100:.1f}% ekuitas per trade (BOT_RISK), majemuk, biaya spread+slip dihitung. "
                      "Hanya trade out-of-sample.",
-           "strategi": [x for x in (sniper(), tren_pullback("scalp"), tren_pullback("intraday")) if x]}
+           "strategi": [x for x in (bot_hfm(), sniper(), tren_pullback("scalp"), tren_pullback("intraday")) if x]}
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     json.dump(out, open(OUT, "w", encoding="utf-8"))
     for s in out["strategi"]:

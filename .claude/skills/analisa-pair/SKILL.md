@@ -97,6 +97,7 @@ Untuk analisis berkala: `/loop 30m /analisa-pair XAUUSD intraday`. Harga di webs
 - `python .claude/skills/analisa-pair/mt5_link.py` cek koneksi; `bot_mt5.py --status` (akun, risiko, syarat live), `--uji-order` (demo saja), `--stop` (kill switch), tanpa argumen = loop. Jalankan loop lewat `Monitor` dan teruskan baris `BOT ORDER/TERISI/TP/SL/DITUTUP/STOP/ERROR` ke HP dengan `PushNotification`.
 - Akun real hanya kalau `BOT_MODE=live`, strategi lulus `validasi.py <strategi> --sumber mt5`, dan syarat real test demo lulus. Jangan pernah mengubah `BOT_MODE`, `BOT_RISK`, atau kredensial MT5 atas inisiatif sendiri; itu keputusan user. Jangan hapus `data/BOT_STOP` kecuali user minta.
 - Risiko per trade dari `BOT_RISK` (maks 10%); sebutkan drawdown di risiko itu (panel Hasil backtest memakai angka yang sama).
+- Backtest bot (aturan bot persis, dalam dollar, data HFM): `python backtest_bot.py [strategi ...]`, lalu `python kinerja.py` (tab "Bot HFM"). 8 Okt: hanya sniper untung (+81%, DD −34,5% di risiko 10%); strategi lain rugi.
 
 ### Validasi sebelum mengabarkan setup
 - `python .claude/skills/analisa-pair/validasi.py <strategi>`: walk-forward 90 hari IS / 30 hari OOS di data 200 hari, fill harus tembus $0.10, order batal kalau harga sudah 70% ke TP1 tanpa entry, biaya 2x, parameter tetangga. Label **SETUP VALID** hanya kalau semua syarat `KRITERIA` lulus.
