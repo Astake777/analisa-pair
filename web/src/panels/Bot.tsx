@@ -14,7 +14,8 @@ type Akun = {
 }
 type Jawab = { ok: boolean; pesan?: string; lot?: number; rugi_di_sl?: number }
 const MAGIC: Record<number, string> = { 770078: 'EA', 770079: 'Web', 0: 'Manual' }
-const KOSONG = { side: 'buy' as Side, entry: '', sl: '', tp: '', lot: '' }
+const PIP = 0.1   // 1 pip XAUUSD = $0.10
+const KOSONG = { side: 'buy' as Side, entry: '', sl: '20', tp: '100', lot: '' }   // sl/tp dalam pips dari entry
 
 // Posisi dan order langsung dari MT5 lewat jembatan lokal, plus tombol tutup dan pasang limit.
 function KontrolMt5({ setup, off }: { setup?: Setup | null; off: number }) {
@@ -57,15 +58,20 @@ function KontrolMt5({ setup, off }: { setup?: Setup | null; off: number }) {
   const pasang = (e: FormEvent) => {
     e.preventDefault()
     const lot = f.lot.trim() ? Number(f.lot) : null
-    const body = { side: f.side, entry: Number(f.entry), sl: Number(f.sl), tp: Number(f.tp), lot }
+    const body = { side: f.side, entry: Number(f.entry), sl: harga.sl, tp: harga.tp, lot }
     jalankan(
-      `Pasang ${f.side.toUpperCase()} LIMIT di akun ${AKUN}?\nEntry ${fmt(body.entry, 2)}, SL ${fmt(body.sl, 2)}, TP ${fmt(body.tp, 2)}, lot ${lot ?? `otomatis (${pctRisiko}% saldo)`}.`,
+      `Pasang ${f.side.toUpperCase()} LIMIT di akun ${AKUN}?\nEntry ${fmt(body.entry, 2)}, SL ${fmt(body.sl, 2)} (${f.sl} pips), TP ${fmt(body.tp, 2)} (${f.tp} pips), lot ${lot ?? `otomatis (${pctRisiko}% saldo)`}.`,
       '/order/limit', body, (j) => `${j.pesan ?? 'Order terpasang.'} Lot ${j.lot ?? '–'}, rugi di SL ${fmt(j.rugi_di_sl, 2)} ${a?.mata_uang ?? ''}.`)
   }
+  // sl/tp diisi dalam pips; harga dihitung dari entry dan arah
+  const arah = f.side === 'sell' ? -1 : 1
+  const harga = { sl: +(Number(f.entry) - arah * Number(f.sl) * PIP).toFixed(2), tp: +(Number(f.entry) + arah * Number(f.tp) * PIP).toFixed(2) }
+  const siap = f.entry !== '' && f.sl !== '' && f.tp !== ''
   // harga setup dalam spot XAU; ditambah selisih broker seperti yang tampil di kartu Setup
+  const pips = (d: number) => String(Math.round(Math.abs(d) / PIP))
   const isiSetup = () => setup && setF({
-    ...f, side: setup.side,
-    entry: (setup.entry + off).toFixed(2), sl: (setup.sl + off).toFixed(2), tp: setup.tp?.[0] != null ? (setup.tp[0] + off).toFixed(2) : '',
+    ...f, side: setup.side, entry: (setup.entry + off).toFixed(2), sl: pips(setup.entry - setup.sl),
+    tp: setup.tp?.[0] != null ? pips(setup.tp[0] - setup.entry) : f.tp,
   })
   const ubah = (k: 'entry' | 'sl' | 'tp' | 'lot') => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value })
 
@@ -120,8 +126,10 @@ function KontrolMt5({ setup, off }: { setup?: Setup | null; off: number }) {
             ))}
           </div>
           <label>Entry<input type="number" step="0.01" inputMode="decimal" required value={f.entry} onChange={ubah('entry')} /></label>
-          <label>Stop loss<input type="number" step="0.01" inputMode="decimal" required value={f.sl} onChange={ubah('sl')} /></label>
-          <label>Take profit<input type="number" step="0.01" inputMode="decimal" required value={f.tp} onChange={ubah('tp')} /></label>
+          <label>Stop loss (pips)<input type="number" step="1" min="1" inputMode="numeric" required value={f.sl} onChange={ubah('sl')} />
+            <small>{siap ? `SL di ${fmt(harga.sl, 2)}` : 'isi entry dulu'}</small></label>
+          <label>Take profit (pips)<input type="number" step="1" min="1" inputMode="numeric" required value={f.tp} onChange={ubah('tp')} />
+            <small>{siap ? `TP di ${fmt(harga.tp, 2)} · RR 1:${(Number(f.tp) / Number(f.sl) || 0).toFixed(1)}` : 'isi entry dulu'}</small></label>
           <label>Lot<input type="number" step="0.01" min="0.01" inputMode="decimal" placeholder={`otomatis ${pctRisiko}% saldo`} value={f.lot} onChange={ubah('lot')} /></label>
           <div className="bot-top">
             <button type="button" className="theme-btn" disabled={!setup} onClick={isiSetup}>Isi dari setup aktif</button>
