@@ -330,7 +330,7 @@ export default function App() {
               </div>
             </div>
             <Chart
-              bars={feed.bars} shift={off} setup={setup} zones={zones} levels={levels} bot={terbuka}
+              bars={feed.bars} shift={off} viewKey={tf} setup={setup} zones={zones} levels={levels} bot={terbuka}
               emptyText={feed.status === 'error' ? 'Feed harga belum tersambung' : 'Memuat harga live'}
             />
             <div className="legend">

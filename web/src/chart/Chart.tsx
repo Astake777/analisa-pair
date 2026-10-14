@@ -16,6 +16,7 @@ type Props = {
   zones: Band[]
   levels: { price: number; label: string; kind: string }[]
   emptyText: string
+  viewKey?: string   // ganti nilai (mis. timeframe) = tampilan chart di-reset; selain itu zoom user dibiarkan
   bot?: { side: string; lot: number; entry: number; sl: number; tp: number; status: string; nama?: string }[]
 }
 const NO_BOT: NonNullable<Props['bot']> = []
@@ -48,16 +49,24 @@ export function keyLevels(levels: Level[], ref: number | undefined, setup: Setup
   return [...pemicu, ...near(sr.filter((l) => l.price > ref)), ...near(sr.filter((l) => l.price <= ref))]
 }
 
-export default function Chart({ bars, shift, setup, zones, levels, emptyText, bot = NO_BOT }: Props) {
+export default function Chart({ bars, shift, setup, zones, levels, emptyText, bot = NO_BOT, viewKey = '' }: Props) {
   const box = useRef<HTMLDivElement>(null)
   const api = useRef<Api | null>(null)
   const lines = useRef<IPriceLine[]>([])
   const extras = useRef<number[]>([])
-  const prev = useRef<{ first?: Bar; len: number; shift: number }>({ len: 0, shift: 0 })
+  const prev = useRef<{ first?: Bar; len: number; shift: number; key?: string }>({ len: 0, shift: 0 })
+  const setupKey = useRef('')
   const [hover, setHover] = useState<Pt | null>(null)
   const [themeRev, setThemeRev] = useState(0)
   const [cd, setCd] = useState<{ top: number; width: number; text: string; up: boolean; price: number } | null>(null)
   const live = useRef({ bars, shift })
+  // tampilan bawaan: 150 candle terakhir, skala harga otomatis
+  const reset = () => {
+    const a = api.current, n = live.current.bars.length
+    if (!a || !n) return
+    a.chart.timeScale().setVisibleLogicalRange({ from: n - 150, to: n + 4 })
+    a.chart.priceScale('right').applyOptions({ autoScale: true })
+  }
   live.current = { bars, shift }
 
   useEffect(() => {
@@ -122,7 +131,7 @@ export default function Chart({ bars, shift, setup, zones, levels, emptyText, bo
     if (full) {
       a.candles.setData(data)
       for (const [s, k] of emas) s.setData(ema(data, k) as { time: UTCTimestamp; value: number }[])
-      if (n && bars[0].time !== p.first?.time) a.chart.timeScale().setVisibleLogicalRange({ from: n - 150, to: n + 4 })
+      if (n && viewKey !== p.key) reset()
     } else {
       if (n > p.len) a.candles.update(data[n - 2])
       a.candles.update(data[n - 1])
@@ -132,8 +141,8 @@ export default function Chart({ bars, shift, setup, zones, levels, emptyText, bo
         if (pts.length) s.update(pts[pts.length - 1])
       }
     }
-    prev.current = { first: bars[0], len: n, shift }
-  }, [bars, shift])
+    prev.current = { first: bars[0], len: n, shift, key: n ? viewKey : p.key }
+  }, [bars, shift, viewKey])
 
   useEffect(() => {
     api.current?.prim.setZones(zones.map((z) => ({ ...z, lo: z.lo + shift, hi: z.hi + shift })))
@@ -169,7 +178,10 @@ export default function Chart({ bars, shift, setup, zones, levels, emptyText, bo
     }
     extras.current = [...(setup ? [setup.entry, setup.sl, ...(setup.tp ?? [])] : []), ...bot.flatMap((o) => [o.entry, o.sl, o.tp])]
       .filter((v) => v != null).map((v) => v + shift)
-    a.chart.priceScale('right').applyOptions({ autoScale: true })
+    // skala harga hanya ikut otomatis saat setup yang ditampilkan berganti, bukan tiap data posisi diperbarui
+    const k = setup ? `${setup.side}:${setup.entry}` : ''
+    if (k !== setupKey.current) a.chart.priceScale('right').applyOptions({ autoScale: true })
+    setupKey.current = k
   }, [setup, levels, shift, themeRev, bars.length > 0, bot])
 
   // Label harga terakhir + hitung mundur candle dalam satu kotak di sumbu kanan, supaya tidak pernah terpisah.
@@ -215,6 +227,7 @@ export default function Chart({ bars, shift, setup, zones, levels, emptyText, bo
             <span>C <b>{fmt(b.close)}</b></span>
           </>
         )}
+        <button type="button" className="chart-reset" onClick={reset} disabled={!bars.length}>Reset tampilan</button>
       </div>
       <div className="chart" ref={box} role="img" aria-label="Chart candlestick dengan EMA, zona entry, range Asia, entry, stop loss dan target">
         {cd && (
