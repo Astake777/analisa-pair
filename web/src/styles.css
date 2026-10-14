@@ -425,3 +425,27 @@ tr.det > td { padding: 4px 0 12px; }
   .semasa { margin: 12px -12px -12px; }
   .semasa > div { padding: 12px 14px; }
 }
+
+/* one-click trading ala MT5: pilih lot dulu (baris atas), lalu SELL di bid / BUY di ask; dua digit terakhir besar = motif harga.
+   Tombol diisi warna tipis sisi transaksinya supaya SELL dan BUY terbedakan tanpa membaca label. */
+.oneclick { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 14px; margin: 2px 0 4px; background: var(--raised); border-radius: var(--r-md); }
+.oc-lot { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.oc-lot-label { font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.oc-step { display: grid; grid-template-columns: var(--tap) 76px var(--tap); border: 1px solid var(--line); border-radius: var(--r-sm); overflow: hidden; background: var(--card); }
+.oc-step button { min-height: var(--tap); border: 0; background: transparent; color: var(--ink); font-size: 18px; font-weight: 600; cursor: pointer; }
+.oc-step button:hover:not(:disabled) { background: var(--raised); }
+.oc-step input { width: 100%; min-height: var(--tap); border: 0; border-inline: 1px solid var(--line); background: transparent; color: var(--ink-strong); text-align: center; font: 700 15px var(--font-num); }
+.oc-step input[aria-invalid="true"] { color: var(--down); }
+.oc-btn { display: grid; gap: 4px; min-height: 76px; padding: 10px 14px; border-radius: var(--r-sm); border: 1px solid currentColor; cursor: pointer; text-align: left; font: inherit; transition: background-color 120ms ease; }
+.oc-sell { color: var(--down); background: color-mix(in srgb, var(--down) 10%, var(--card)); justify-items: start; }
+.oc-buy { color: var(--up); background: color-mix(in srgb, var(--up) 10%, var(--card)); justify-items: end; text-align: right; }
+.oc-sell:hover:not(:disabled) { background: color-mix(in srgb, var(--down) 18%, var(--card)); }
+.oc-buy:hover:not(:disabled) { background: color-mix(in srgb, var(--up) 18%, var(--card)); }
+.oc-btn:active:not(:disabled) { transform: translateY(1px); }
+.oc-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.oc-sisi { font-size: 12px; font-weight: 800; letter-spacing: 0.06em; }
+.oc-harga { font-size: 14px; color: var(--ink); white-space: nowrap; line-height: 1; }
+.oc-harga b { font-size: 28px; font-weight: 700; color: var(--ink-strong); margin-left: 1px; }
+.oc-ket { grid-column: 1 / -1; margin: 0; font-size: 12px; text-align: center; }
+.oc-hasil { grid-column: 1 / -1; margin: 0; font-size: 13px; }
+@media (prefers-reduced-motion: reduce) { .oc-btn { transition: none; } .oc-btn:active:not(:disabled) { transform: none; } }

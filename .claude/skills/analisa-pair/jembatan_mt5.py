@@ -23,6 +23,7 @@ import secrets
 import sys
 import threading
 import time
+import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
@@ -33,9 +34,11 @@ from bot_mt5 import PIP, hari_wib, konfig, lot_untuk, syarat_live  # noqa: E402
 PORT = 5181
 MAGIC_EA = 770078
 MAGIC_WEB = 770079
+MAGIC_AUTO = 770080   # setup analisis yang dipasang otomatis oleh jembatan
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..")
 TOKEN_FILE = os.path.join(ROOT, "data", "jembatan_token.txt")
 BATAL_FILE = os.path.join(ROOT, "data", "setup_dibatalkan.json")
+AUTO_FILE = os.path.join(ROOT, "data", "auto_pasang.json")
 MAKS_BODY = 10 * 1024
 HARI_RIWAYAT = 60
 TF_WEB = {"M1": "TIMEFRAME_M1", "M5": "TIMEFRAME_M5", "M15": "TIMEFRAME_M15", "M30": "TIMEFRAME_M30",
@@ -147,6 +150,151 @@ def batal_simpan(b, now=None):
     return {"ok": True}
 
 
+# ---- pasang setup analisis otomatis ----
+AUTO_UMUR = 6 * 3600          # analisis lebih tua dari ini tidak dipasang
+AUTO_HARIAN = 3               # maks limit otomatis per hari WIB
+AUTO_BATAL_FRAC = 0.7         # sama dengan nasib.ts / EA: 70% ke TP1 tanpa terisi = batal
+
+
+def auto_baca(path=None):
+    try:
+        st = json.load(open(path or AUTO_FILE, encoding="utf-8"))
+    except (OSError, ValueError):
+        st = {}
+    return {"aktif": bool(st.get("aktif", True)), "off": float(st.get("off", 0) or 0), "dipasang": st.get("dipasang", {})}
+
+
+def auto_tulis(st, path=None):
+    path = path or AUTO_FILE
+    with open(path + ".tmp", "w", encoding="utf-8") as f:
+        json.dump(st, f)
+    os.replace(path + ".tmp", path)
+
+
+def auto_atur(b, path=None):
+    st = auto_baca(path)
+    if "aktif" in b:
+        st["aktif"] = bool(b["aktif"])
+    if "off" in b:
+        off = float(b["off"])
+        if not math.isfinite(off) or abs(off) > 100:
+            raise ValueError("selisih harga broker tidak masuk akal")
+        st["off"] = off
+    auto_tulis(st, path)
+    print(f"EA AUTO {'AKTIF' if st['aktif'] else 'MATI'} (selisih broker {st['off']:+.2f})", flush=True)
+    return {"ok": True, "aktif": st["aktif"], "off": st["off"]}
+
+
+def kunci_setup(s):
+    return f"{s['side']}:{round(s['entry'] * 10)}"
+
+
+def kandidat_auto(analisis, now):
+    """Setup SIAP/AKTIF dari analisis terbaru tiap mode. Kontra-tren dan sniper (sudah dipasang EA) dilewati."""
+    out = []
+    for a in analisis:
+        p = a.get("payload") or {}
+        t0 = dt.datetime.fromisoformat((p.get("updatedAt") or a["created_at"]).replace("Z", "+00:00")).timestamp()
+        if now - t0 > AUTO_UMUR:
+            continue
+        for s in p.get("setups") or []:
+            if str(s.get("status", "")).startswith(("SIAP", "AKTIF")) and s.get("label") not in ("kontra-tren", "sniper") \
+                    and s.get("sl") and s.get("tp"):
+                out.append((kunci_setup(s), s, t0, a.get("mode", "")))
+    return out
+
+
+def nasib_setup(s, t0, rows, off):
+    """Jalur harga broker sejak setup dibuat -> 'aman' (boleh dipasang) / 'invalid' / 'batal' / 'terlewat'."""
+    buy = s["side"] != "sell"
+    e, sl, tp = s["entry"] + off, s["sl"] + off, s["tp"][0] + off
+    batas = e + (tp - e) * AUTO_BATAL_FRAC
+    for b in rows:
+        if b["time"] < t0 - 60:
+            continue
+        if (b["close"] < sl) if buy else (b["close"] > sl):
+            return "invalid"
+        if (b["low"] <= e) if buy else (b["high"] >= e):
+            return "terlewat"
+        if (b["high"] >= batas) if buy else (b["low"] <= batas):
+            return "batal"
+    return "aman"
+
+
+def ambil_analisis():
+    import publish
+    url, key = publish._creds()
+    out = []
+    for m in ("scalp", "intraday", "swing"):
+        q = f"{url}/rest/v1/analyses?pair=eq.XAUUSD&mode=eq.{m}&select=mode,created_at,payload&order=created_at.desc&limit=1"
+        with urllib.request.urlopen(urllib.request.Request(q, headers=publish._headers(key, "")), timeout=20) as f:
+            out += json.load(f)
+    return out
+
+
+def auto_putaran(mt5, nama, cfg, analisis, now, path=None):
+    """Satu putaran: bersihkan limit otomatis yang sudah tidak sah, lalu pasang satu setup baru kalau ada."""
+    st = auto_baca(path)
+    if not st["aktif"]:
+        return []
+    log, ubah = [], False
+    t = mt5.symbol_info_tick(nama)
+    rows = bars(mt5, nama, "M1", 1500)
+    batal = batal_baca()
+    tiket = {v.get("tiket"): k for k, v in st["dipasang"].items()}
+    for o in mt5.orders_get(symbol=nama) or []:
+        if o.magic != MAGIC_AUTO:
+            continue
+        k = tiket.get(o.ticket)
+        info = st["dipasang"].get(k, {})
+        buy = o.type % 2 == 0
+        alasan = None
+        if k in batal:
+            alasan = "setup dibatalkan di website"
+        elif o.tp and ((t.bid >= o.price_open + (o.tp - o.price_open) * AUTO_BATAL_FRAC) if buy
+                       else (t.ask <= o.price_open - (o.price_open - o.tp) * AUTO_BATAL_FRAC)):
+            alasan = "harga sudah 70% ke TP tanpa terisi"
+        elif o.sl and rows and ((rows[-1]["close"] < o.sl) if buy else (rows[-1]["close"] > o.sl)):
+            alasan = "close M1 menembus SL sebelum terisi"
+        elif now - info.get("waktu", now) > 24 * 3600:
+            alasan = "lewat 24 jam"
+        if alasan:
+            ok, pesan = _hapus_order(mt5, o)
+            log.append(f"EA AUTO BATAL {o.ticket} ({alasan}) -> {pesan}")
+            if k:
+                st["dipasang"][k]["status"] = "dibatalkan"
+                ubah = True
+    sibuk = any(x.magic == MAGIC_AUTO for x in list(mt5.orders_get(symbol=nama) or []) + list(mt5.positions_get(symbol=nama) or []))
+    hari = hari_wib(now)
+    n_hari = sum(1 for v in st["dipasang"].values() if v.get("status") == "terpasang" and hari_wib(v.get("waktu", 0)) == hari)
+    for k, s, t0, mode in kandidat_auto(analisis, now):
+        if k in st["dipasang"] or k in batal:
+            continue
+        nasib = nasib_setup(s, t0, rows, st["off"])
+        if nasib != "aman":
+            st["dipasang"][k] = {"status": nasib, "waktu": int(now), "mode": mode}
+            ubah = True
+            continue
+        if sibuk or n_hari >= AUTO_HARIAN:
+            break   # coba lagi di putaran berikutnya
+        off = st["off"]
+        try:
+            r = order_limit(mt5, nama, cfg, {"side": s["side"], "entry": s["entry"] + off, "sl": s["sl"] + off,
+                                             "tp": s["tp"][0] + off, "lot": None},
+                            magic=MAGIC_AUTO, komentar=f"auto {mode}"[:31], label="AUTO")
+        except ValueError as x:   # harga sudah di sisi salah, margin, akun real: catat dan lewati
+            st["dipasang"][k] = {"status": f"ditolak: {x}"[:80], "waktu": int(now), "mode": mode}
+            ubah = True
+            continue
+        st["dipasang"][k] = {"status": "terpasang" if r["ok"] else f"gagal: {r['pesan']}"[:80], "tiket": r["tiket"],
+                             "waktu": int(now), "mode": mode}
+        ubah, sibuk = True, r["ok"]
+        n_hari += r["ok"]
+    if ubah:
+        auto_tulis(st, path)
+    return log
+
+
 def akun_posisi(mt5, nama, risiko):
     a, t = mt5.account_info(), mt5.symbol_info_tick(nama)
     side = lambda tp: "buy" if tp % 2 == 0 else "sell"   # 0/2/4/6 buy, 1/3/5/7 sell
@@ -162,6 +310,12 @@ def akun_posisi(mt5, nama, risiko):
                       for o in mt5.orders_get(symbol=nama) or []]}
 
 
+def _isi(mt5, nama):
+    """Mode filling untuk deal (market/close) yang diizinkan simbol: FOK, lalu IOC, kalau tidak RETURN."""
+    f = getattr(mt5.symbol_info(nama), "filling_mode", 0)
+    return mt5.ORDER_FILLING_FOK if f & 1 else mt5.ORDER_FILLING_IOC if f & 2 else mt5.ORDER_FILLING_RETURN
+
+
 def _kirim(mt5, req, sukses):
     r = mt5.order_send(req)
     if r is not None and r.retcode in (mt5.TRADE_RETCODE_DONE, mt5.TRADE_RETCODE_PLACED):
@@ -169,7 +323,7 @@ def _kirim(mt5, req, sukses):
     return False, f"{r.comment} ({r.retcode})" if r is not None else f"order_send gagal {mt5.last_error()}", r
 
 
-def order_limit(mt5, nama, cfg, b):
+def order_limit(mt5, nama, cfg, b, magic=MAGIC_WEB, komentar="web", label="WEB"):
     """Buy/sell limit dari website. Akun real hanya kalau BOT_MODE=live. ValueError -> 400."""
     akun = mt5.account_info()
     if akun.trade_mode != 0 and cfg["mode"] != "live":
@@ -219,12 +373,50 @@ def order_limit(mt5, nama, cfg, b):
         lot = muat
     req = {"action": mt5.TRADE_ACTION_PENDING, "symbol": nama, "volume": lot, "price": entry, "sl": sl, "tp": tp,
            "type": jenis,
-           "deviation": 20, "magic": MAGIC_WEB, "comment": "web",
+           "deviation": 20, "magic": magic, "comment": komentar,
            "type_time": mt5.ORDER_TIME_GTC, "type_filling": mt5.ORDER_FILLING_RETURN}
     ok, pesan, r = _kirim(mt5, req, "order terpasang")
-    print(f"EA WEB ORDER {side.upper()} LIMIT {lot} @ {entry} SL {sl} TP {tp} -> {pesan}", flush=True)
+    print(f"EA {label} ORDER {side.upper()} LIMIT {lot} @ {entry} SL {sl} TP {tp} -> {pesan}", flush=True)
     return {"ok": ok, "pesan": pesan, "tiket": r.order if ok else None, "lot": lot,
             "rugi_di_sl": round(lot * abs(entry - sl) / PIP * pip_value, 2)}
+
+
+def order_pasar(mt5, nama, cfg, b):
+    """Buy/sell market dari website, lot dari user, tanpa SL/TP. Akun real hanya kalau BOT_MODE=live."""
+    akun = mt5.account_info()
+    if akun.trade_mode != 0 and cfg["mode"] != "live":
+        raise ValueError("akun real terkunci: BOT_MODE bukan live")
+    side = b.get("side")
+    if side not in ("buy", "sell"):
+        raise ValueError("side harus buy atau sell")
+    sym, t = mt5.symbol_info(nama), mt5.symbol_info_tick(nama)
+    try:
+        lot = round(math.floor(float(b.get("lot")) / sym.volume_step + 1e-9) * sym.volume_step, 2)
+    except (TypeError, ValueError, OverflowError):
+        raise ValueError("lot harus angka")
+    if not sym.volume_min <= lot <= sym.volume_max:
+        raise ValueError(f"lot harus {sym.volume_min}..{sym.volume_max}")
+    beli = side == "buy"
+    harga = t.ask if beli else t.bid
+    per_lot = mt5.order_calc_margin(mt5.ORDER_TYPE_BUY if beli else mt5.ORDER_TYPE_SELL, nama, 1.0, harga) \
+        if hasattr(mt5, "order_calc_margin") else None
+    bebas = getattr(akun, "margin_free", None)
+    # margin dari broker saat ini, jadi HMR saat news (1:500 -> 1:200 dst.) ikut terhitung: lot dikecilkan supaya muat
+    catatan = ""
+    if per_lot and bebas is not None and lot * per_lot > bebas * 0.95:
+        muat = round(math.floor(bebas * 0.95 / per_lot / sym.volume_step + 1e-9) * sym.volume_step, 2)
+        if muat < sym.volume_min:
+            raise ValueError(f"margin kurang: {sym.volume_min} lot butuh ${sym.volume_min * per_lot:.2f}, margin bebas ${bebas:.2f}")
+        catatan = f" (lot {lot} diturunkan ke {muat}: margin, leverage efektif 1:{harga * sym.trade_contract_size / per_lot:.0f})"
+        lot = muat
+    ok, pesan, r = _kirim(mt5, {"action": mt5.TRADE_ACTION_DEAL, "symbol": nama, "volume": lot,
+                                "type": mt5.ORDER_TYPE_BUY if beli else mt5.ORDER_TYPE_SELL, "price": harga,
+                                "deviation": 30, "magic": MAGIC_WEB, "comment": "web market",
+                                "type_time": mt5.ORDER_TIME_GTC, "type_filling": _isi(mt5, nama)}, "posisi dibuka")
+    isi = getattr(r, "price", 0) or harga
+    pesan += catatan
+    print(f"EA WEB MARKET {side.upper()} {lot} @ {isi} -> {pesan}", flush=True)
+    return {"ok": ok, "pesan": pesan, "tiket": getattr(r, "order", None) if ok else None, "lot": lot, "harga": isi}
 
 
 def _tutup_posisi(mt5, nama, p):
@@ -233,7 +425,7 @@ def _tutup_posisi(mt5, nama, p):
     return _kirim(mt5, {"action": mt5.TRADE_ACTION_DEAL, "symbol": nama, "volume": p.volume, "position": p.ticket,
                         "type": mt5.ORDER_TYPE_SELL if beli else mt5.ORDER_TYPE_BUY, "price": t.bid if beli else t.ask,
                         "deviation": 30, "magic": p.magic, "comment": "web close",
-                        "type_filling": mt5.ORDER_FILLING_RETURN}, "posisi ditutup")[:2]
+                        "type_filling": _isi(mt5, nama)}, "posisi ditutup")[:2]
 
 
 def _hapus_order(mt5, o):
@@ -288,6 +480,8 @@ def handler(mt5, nama, token=None):
                         body = mikro(mt5, nama)
                     elif u.path == "/setup/batal":
                         body = batal_baca()
+                    elif u.path == "/auto":
+                        body = auto_baca()
                     elif u.path == "/ea/status":
                         body = ea_status()
                     elif u.path == "/akun/posisi":
@@ -318,6 +512,10 @@ def handler(mt5, nama, token=None):
                         body = order_limit(mt5, nama, konfig(data.env()), b)
                     elif path == "/order/close":
                         body = tutup(mt5, nama, b)
+                    elif path == "/order/pasar":
+                        body = order_pasar(mt5, nama, konfig(data.env()), b)
+                    elif path == "/auto":
+                        body = auto_atur(b)
                     elif path == "/order/close-all":
                         body = tutup_semua(mt5, nama)
                     else:
@@ -643,6 +841,28 @@ def _selftest():
         assert ea_status(f) == {"ada": False}
         json.dump({"waktu_utc": 100, "boleh_order": True}, open(f, "w"))
         assert ea_status(f, now=130) == {"waktu_utc": 100, "boleh_order": True, "ada": True, "umur": 30}
+    # order market: lot dari user, filling FOK kalau simbol hanya mengizinkan FOK, tanpa SL/TP
+    m = mt5_link.Palsu()
+    m.ORDER_TIME_GTC, m.ORDER_TYPE_BUY, m.ORDER_TYPE_SELL = 0, 0, 1
+    m.ORDER_FILLING_FOK, m.ORDER_FILLING_IOC = 0, 1
+    m.sym.filling_mode = 1
+    with contextlib.redirect_stdout(io.StringIO()):
+        r = order_pasar(m, "XAUUSD", {"mode": "demo"}, {"side": "sell", "lot": 0.037})
+    q = m.kirim[-1]
+    assert r["lot"] == 0.03 and q["action"] == m.TRADE_ACTION_DEAL and q["type"] == m.ORDER_TYPE_SELL, (r, q)
+    assert q["type_filling"] == m.ORDER_FILLING_FOK and "sl" not in q and q["price"] == 4100.0, q
+    # HMR: margin $2070/lot (1:200), margin bebas $120 -> lot 0.10 diturunkan ke 0.05
+    m.akun.margin_free = 120.0
+    m.order_calc_margin = lambda t, s, v, p: 2070.0 * v
+    with contextlib.redirect_stdout(io.StringIO()):
+        r = order_pasar(m, "XAUUSD", {"mode": "demo"}, {"side": "buy", "lot": 0.10})
+    assert r["lot"] == 0.05 and "diturunkan ke 0.05" in r["pesan"] and "1:198" in r["pesan"], r
+    for b in ({"side": "x", "lot": 0.01}, {"side": "buy", "lot": "a"}, {"side": "buy", "lot": 0}):
+        try:
+            order_pasar(m, "XAUUSD", {"mode": "demo"}, b)
+            raise AssertionError(b)
+        except ValueError:
+            pass
     print("selftest OK")
 
 

@@ -1,11 +1,81 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import type { Setup, Side } from '../lib/supabase'
-import { fmt } from '../lib/format'
+import { fmt, kirimMt5, store } from '../lib/format'
 import { useAksi, type Mt5 } from './Posisi'
 
 
 
 const PIP = 0.1   // 1 pip XAUUSD = $0.10
+
+// Harga ala MT5: bagian depan kecil, dua digit terakhir besar, supaya perubahan tick terbaca sekilas.
+function Harga({ v }: { v: number | null }) {
+  if (v == null) return <span className="oc-harga">–</span>
+  const t = v.toFixed(2)
+  return <span className="oc-harga num">{t.slice(0, -2)}<b>{t.slice(-2)}</b></span>
+}
+
+// One-click trading: SELL di bid / BUY di ask, lot bebas, tanpa SL/TP dan tanpa konfirmasi (boleh diklik beruntun).
+function OneClick({ mati, muat }: { mati: boolean; muat: () => void }) {
+  const [tick, setTick] = useState<{ bid: number; ask: number } | null>(null)
+  const [lot, setLot] = useState(() => store.get('oc-lot') ?? '0.01')
+  const [jalan, setJalan] = useState(0)
+  const [hasil, setHasil] = useState<{ ok: boolean; teks: string } | null>(null)
+  const no = useRef(0)
+  useEffect(() => {
+    const ambil = () => fetch('/mt5/tick').then((r) => (r.ok ? r.json() : Promise.reject())).then(setTick, () => setTick(null))
+    ambil()
+    const t = setInterval(ambil, 1000)
+    return () => clearInterval(t)
+  }, [])
+  useEffect(() => {
+    if (!hasil) return
+    const t = setTimeout(() => setHasil(null), 10_000)
+    return () => clearTimeout(t)
+  }, [hasil])
+  const n = Math.floor(Number(lot) * 100 + 1e-6) / 100
+  const valid = Number.isFinite(n) && n >= 0.01
+  const ubah = (v: string) => { setLot(v); store.set('oc-lot', v) }
+  const geser = (d: number) => ubah(Math.max(0.01, Math.round(((valid ? n : 0.01) + d) * 100) / 100).toFixed(2))
+  const kirim = async (side: 'buy' | 'sell') => {
+    const id = ++no.current
+    setJalan((x) => x + 1)
+    try {
+      const j = await kirimMt5<{ ok: boolean; pesan?: string; lot?: number; harga?: number }>('/order/pasar', { side, lot: n })
+      setHasil({ ok: true, teks: `#${id} ${side.toUpperCase()} ${j.lot} @ ${fmt(j.harga, 2)} · ${j.pesan ?? 'posisi dibuka'}` })
+    } catch (e) {
+      setHasil({ ok: false, teks: `#${id} ${side.toUpperCase()} gagal: ${(e as Error).message}` })
+    } finally { setJalan((x) => x - 1); muat() }
+  }
+  const off = mati || !tick || !valid
+  return (
+    <div className="oneclick">
+      <div className="oc-lot">
+        <label className="oc-lot-label" htmlFor="oc-lot">Lot</label>
+        <div className="oc-step">
+          <button type="button" onClick={() => geser(-0.01)} aria-label="Kurangi lot 0.01" disabled={mati}>−</button>
+          <input id="oc-lot" type="number" inputMode="decimal" step="0.01" min="0.01" value={lot} onChange={(e) => ubah(e.target.value)} aria-invalid={!valid} />
+          <button type="button" onClick={() => geser(0.01)} aria-label="Tambah lot 0.01" disabled={mati}>+</button>
+        </div>
+      </div>
+      <button type="button" className="oc-btn oc-sell" disabled={off} onClick={() => kirim('sell')} aria-label={`Sell market ${n} lot di ${tick ? fmt(tick.bid, 2) : 'bid'}`}>
+        <span className="oc-sisi">SELL</span><Harga v={tick?.bid ?? null} />
+      </button>
+      <button type="button" className="oc-btn oc-buy" disabled={off} onClick={() => kirim('buy')} aria-label={`Buy market ${n} lot di ${tick ? fmt(tick.ask, 2) : 'ask'}`}>
+        <span className="oc-sisi">BUY</span><Harga v={tick?.ask ?? null} />
+      </button>
+      <p className="oc-ket sub" aria-live="polite">
+        {jalan > 0 ? `Mengirim ${jalan} order` : !valid ? 'Lot minimal 0.01' : 'Order market tanpa SL/TP'}
+        {tick && <> · spread {((tick.ask - tick.bid) / PIP).toFixed(1)} pips</>}
+      </p>
+      {hasil && (
+        <p className={`setup-state hasil oc-hasil ${hasil.ok ? '' : 'off'}`} role={hasil.ok ? 'status' : 'alert'}>
+          <span>{hasil.teks}</span>
+          <button type="button" className="tutup-x" aria-label="Tutup pesan" onClick={() => setHasil(null)}>×</button>
+        </p>
+      )}
+    </div>
+  )
+}
 const KOSONG = { side: 'buy' as Side, entry: '', sl: '20', tp: '100', lot: '' }   // sl/tp dalam pips dari entry
 
 // Posisi dan order langsung dari MT5 lewat jembatan lokal, plus tombol tutup dan pasang limit.
@@ -48,6 +118,7 @@ function KontrolMt5({ setup, off, mt5 }: { setup?: Setup | null; off: number; mt
       </div>
       {putus && <p className="setup-state off" role="alert">Kontrol MT5 butuh jembatan MT5 (mulai_trading.bat)</p>}
       {!a && !putus && <p className="sub">Memuat akun MT5.</p>}
+      <OneClick mati={putus || !a} muat={muat} />
       <div className="bot-top">
         <button type="button" className="theme-btn" aria-expanded={buka} disabled={putus || !a} onClick={() => setBuka(!buka)}>Set limit</button>
         <button type="button" className="theme-btn bahaya" disabled={!a || mati || (!a.posisi.length && !a.order.length)} aria-expanded={yakin} onClick={() => setYakin(!yakin)}>Close all</button>
