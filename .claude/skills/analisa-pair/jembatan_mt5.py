@@ -453,6 +453,10 @@ def main():
                 print(f"JEMBATAN news: {n} event USD high impact ditulis untuk EA", flush=True)
             with KUNCI:
                 akun = mt5.account_info()
+                if akun is None:   # terminal belum login atau koneksi ke terminal putus: sambung ulang
+                    mt5.shutdown()
+                    mt5_link.sambung(e)
+                    akun = mt5.account_info()
                 sejak = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=HARI_RIWAYAT)
                 rows = baris_ea(mt5, akun, nama, risiko, sejak)
                 st = status_ea(mt5, akun, nama, rows, risiko, now)
