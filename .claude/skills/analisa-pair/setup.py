@@ -16,7 +16,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from backtest import EXPIRE  # noqa: E402
 from entry import setup as hitung_setup  # noqa: E402
-from indikator import adx, atr, ema, kolom, macd, rsi, swings, tutup  # noqa: E402
+from indikator import adx, atr, ema, kolom, macd, rsi, struktur, swings, tutup  # noqa: E402
 from pemilih import pilih, terbaru  # noqa: E402
 from regime import MODES, STEP, TFS, regime_sekarang  # noqa: E402
 from strategi import REGISTRY  # noqa: E402
@@ -52,7 +52,12 @@ def bias_tf(rows):
     cat = f"ADX {a:.0f}, harga {pos}" if a is not None else f"harga {pos}"
     if hist is not None:
         cat += f", MACD {'bullish' if hist > 0 else 'bearish'}"
-    return {"bias": bias, "rsi": r and round(r, 1), "catatan": cat}
+    st = struktur(h, l, c)
+    if st["tren"]:
+        st = {"tren": st["tren"], "jenis": st["jenis"], "arah": st["arah"], "level": r2(st["level"]),
+              "candleLalu": len(c) - 1 - st["i"]}
+        cat += f", {st['jenis']} {st['arah']} di {st['level']:.2f} ({st['candleLalu']} candle lalu)"
+    return {"bias": bias, "rsi": r and round(r, 1), "catatan": cat, "struktur": st}
 
 
 def levels(closed, m, price, amd, atr_e):
@@ -177,7 +182,13 @@ def bangun(by_tf, pair, mode, now, price, events=(), rows_bt=(), basis=None, sum
         status = "NO TRADE"
     else:
         status = next((v for k, v in STATUS if main["status"].startswith(k)), "NO TRADE")
-    searah = main and sum(b["bias"].startswith("Bullish" if main["side"] == "buy" else "Bearish")
+    # struktur TF entry (BOS/CHoCH terakhir) berlawanan dengan setup -> dicatat dan keyakinan tidak naik
+    st_e = bias[LABEL[m["entry"]]].get("struktur") or {}
+    lawan = bool(main and st_e.get("tren") and (st_e["tren"] == "naik") != (main["side"] == "buy"))
+    if lawan:
+        notes.append(f"Struktur {LABEL[m['entry']]} {st_e['jenis']} {st_e['arah']} di {st_e['level']} berlawanan "
+                     f"dengan setup {main['side'].upper()}: tunggu struktur berbalik searah sebelum entry.")
+    searah = main and not lawan and sum(b["bias"].startswith("Bullish" if main["side"] == "buy" else "Bearish")
                           for b in bias.values()) * 3 >= 2 * len(bias)
     keyakinan = "sedang" if searah and status != "NO TRADE" else "rendah"
     notes.append("Keyakinan dari engine maksimal 'sedang'; makro dan berita belum dinilai.")
@@ -246,7 +257,8 @@ def _selftest():
     assert set(ex["setups"][0]) <= set(s), set(ex["setups"][0]) - set(s)
     assert all(x["kind"] in ("resistance", "support", "zona-sell", "zona-buy") for x in p["levels"])
     assert [x["price"] for x in p["levels"]] == sorted((x["price"] for x in p["levels"]), reverse=True)
-    assert set(p["bias"]) == {"1H", "30m", "5m"} and set(ex["bias"]["4H"]) == set(p["bias"]["1H"])
+    assert set(p["bias"]) == {"1H", "30m", "5m"} and set(ex["bias"]["4H"]) <= set(p["bias"]["1H"])
+    assert all(b["struktur"]["tren"] in (None, "naik", "turun") for b in p["bias"].values()), p["bias"]
     assert set(ex["amd"]) == set(p["amd"]) and p["zones"][0]["side"] == "buy", p["amd"]
     q = bangun(by, "XAUUSD", "scalp", now, price, [now + 600], rows_bt)
     assert q["status"] == "TUNGGU NEWS" and q["strategi"]["regime"]["jendelaNews"] and "basis" not in q

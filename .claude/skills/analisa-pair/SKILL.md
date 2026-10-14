@@ -87,6 +87,7 @@ Website lokal: `cd web && npm run dev` lalu buka http://localhost:5180 (harga li
 Untuk analisis berkala: `/loop 30m /analisa-pair XAUUSD intraday`. Harga di website sudah live sendiri, jadi `/loop` hanya untuk memperbarui analisis.
 
 ### Modul pendukung analisis
+- Struktur pasar (`indikator.struktur`, otomatis di `setup.py`): tiap TF bias/entry mendapat `struktur` = BOS/CHoCH terakhir dari close yang menembus swing fraktal (n=2) yang sudah pasti; searah tren sebelumnya = **BOS**, berbalik = **CHoCH**. Tampil di catatan Bias (website) dan dipakai engine: setup yang berlawanan dengan struktur TF entry dicatat dan keyakinannya tidak dinaikkan. Saat membaca: CHoCH di TF kecil melawan bias TF besar = koreksi/peringatan, bukan pembalikan tren sampai TF besar ikut CHoCH.
 - Orderflow: `python .claude/skills/analisa-pair/orderflow.py` → delta 1 jam, CVD hari ini, AVWAP (hari, minggu, London, NY, swing 1H), volume profile kemarin dan hari ini (POC/VAH/VAL). Volume dari Binance XAUT (proksi, bukan COMEX); sebutkan itu kalau mengutipnya.
 - Skenario news: `python .claude/skills/analisa-pair/skenario_news.py XAUUSD [--jam 48]` → 3 skenario panas/sesuai/dingin, peluang Polymarket, gerak median historis; `publish.py skenario XAUUSD` (butuh migrasi `20261008010000_skenario.sql`). Event tanpa ambang di news.SPEC dilewati, jangan mengarang ambang.
 - Filter kondisi pasar: `python filter_kondisi.py <strategi> <mode>`; hanya dipakai live kalau memperbaiki OOS (8 Okt: tidak ada yang lolos).
@@ -122,7 +123,7 @@ Untuk analisis berkala: `/loop 30m /analisa-pair XAUUSD intraday`. Harga di webs
 
 | Aset | Harga | Hari ini |   ← pair (spot) + driver makro
 
-### Bias        ← tabel TF + regime + fase AMD + konfirmasi makro (1–2 kalimat)
+### Bias        ← tabel TF (bias EMA + struktur BOS/CHoCH terakhir) + regime + fase AMD + konfirmasi makro (1–2 kalimat)
 ### Strategi    ← strategi terpilih + angka backtest OOS-nya (trade, winrate, expectancy), atau alasan NO TRADE
 ### Berita      ← 3 judul terbaru (bacaanmu sendiri) + event kalender terdekat (WIB, A/F/P)
 ### Prediksi news ← per event: LEAN atau HASIL, arah pair, kekuatan, syarat konfirmasi 10Y

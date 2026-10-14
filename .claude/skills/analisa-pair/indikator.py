@@ -126,6 +126,29 @@ def swings(h, l, n=2):
     return sh, sl
 
 
+def struktur(h, l, c, n=2):
+    """Market structure dari close yang menembus swing terakhir yang sudah pasti (fraktal n).
+    Searah tren sebelumnya = BOS, berbalik = CHoCH. -> {tren, jenis, arah, level, i} atau tren None kalau belum ada."""
+    sh, sl = swings(h, l, n)
+    hi = lo = None            # swing terakhir yang sudah pasti dan belum ditembus close
+    a = b = 0
+    tren, akhir = None, None
+    for i in range(len(c)):
+        while a < len(sh) and sh[a][0] + n <= i:
+            hi = sh[a]
+            a += 1
+        while b < len(sl) and sl[b][0] + n <= i:
+            lo = sl[b]
+            b += 1
+        if hi and c[i] > hi[1]:
+            akhir = {"jenis": "CHoCH" if tren == "turun" else "BOS", "arah": "bullish", "level": hi[1], "i": i}
+            tren, hi = "naik", None
+        elif lo and c[i] < lo[1]:
+            akhir = {"jenis": "CHoCH" if tren == "naik" else "BOS", "arah": "bearish", "level": lo[1], "i": i}
+            tren, lo = "turun", None
+    return {"tren": tren, **(akhir or {})}
+
+
 def fvg(h, l):
     """Fair value gap 3 candle (i-2, i-1, i) -> [(i, 'buy'|'sell', lo, hi)]."""
     out = []
@@ -183,6 +206,11 @@ def _selftest():
     assert k[-1] == 100 and d[-1] == 100 and d[14] is None and d[15] == 100
     sh, sl = swings([1, 2, 5, 2, 1, 3, 1], [1, 0, 4, 2, 0.5, 2, 1])
     assert sh == [(2, 5)] and sl == [(4, 0.5)], (sh, sl)
+    # struktur n=1: naik tembus swing high 3 (BOS), lalu 4 (BOS), lalu close 2 di bawah swing low 3 = CHoCH bearish
+    z = [1, 3, 2, 4, 3, 5, 2, 1.5]
+    assert struktur(z, z, z, 1) == {"tren": "turun", "jenis": "CHoCH", "arah": "bearish", "level": 3, "i": 6}
+    assert struktur(z[:6], z[:6], z[:6], 1) == {"tren": "naik", "jenis": "BOS", "arah": "bullish", "level": 4, "i": 5}
+    assert struktur([1, 1, 1], [1, 1, 1], [1, 1, 1]) == {"tren": None}
     assert fvg([10, 11, 14], [9, 10, 12]) == [(2, "buy", 10, 12)]
     assert fvg([10, 9, 7], [8, 7, 5]) == [(2, "sell", 7, 8)]
     ds = displacement([0, 0, 10], [1, 1, 10], [0, 0, 1], [1, 1, 2], [1, 2, 2])
