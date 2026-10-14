@@ -532,11 +532,15 @@ void TulisStatus(string ack, string hasil)
    StringReplace(hasil, "\"", "'");
    string js = StringFormat("{\"ack\":\"%s\",\"hasil\":\"%s\",\"waktu_utc\":%I64d,\"saldo\":%.2f,\"ekuitas\":%.2f,\"mata_uang\":\"%s\","
                             "\"algo_trading\":%s,\"dijeda\":%s,\"risk_persen\":%.1f,\"be_pips\":%.0f,\"boleh_order\":%s,\"alasan\":\"%s\","
-                            "\"sl_hari_ini\":%d,\"entry_hari_ini\":%d,\"poi_aktif\":%d,\"posisi\":[%s],\"order\":[%s],\"log_terakhir\":\"%s\"}",
+                            "\"sl_hari_ini\":%d,\"entry_hari_ini\":%d,\"poi_aktif\":%d,\"posisi\":[%s],\"order\":[%s],\"log_terakhir\":\"%s\","
+                            "\"aturan\":{\"max_sl\":%d,\"max_entry\":%d,\"max_spread\":%d,\"news_menit\":%d,\"sl_pips\":%.0f,"
+                            "\"tp_min_pips\":%.0f,\"rr\":%.1f,\"expire_menit\":%d,\"poi_tf\":\"%s\",\"magic\":%I64d}}",
                             ack, hasil, (long)KeUtc(TimeCurrent()), AccountInfoDouble(ACCOUNT_BALANCE), AccountInfoDouble(ACCOUNT_EQUITY),
                             AccountInfoString(ACCOUNT_CURRENCY), TerminalInfoInteger(TERMINAL_TRADE_ALLOWED) ? "true" : "false",
                             Dijeda() ? "true" : "false", RiskFrac() * 100, BePips(), boleh ? "true" : "false", alasan,
-                            n_sl, n_entry, ArraySize(pois), pos, ord, log_akhir);
+                            n_sl, n_entry, ArraySize(pois), pos, ord, log_akhir,
+                            Max_SL_Harian, Max_Entry_Harian, Max_Spread_Points, News_Menit, SL_Jarak / PIP,
+                            TP_Min / PIP, RR, Expire_Menit, StringSubstr(EnumToString(POI_TF), 7), Magic);
    int f = FileOpen(STATUS_FILE + ".tmp", FILE_WRITE | FILE_TXT | FILE_ANSI | FILE_COMMON);
    if(f == INVALID_HANDLE) return;
    FileWriteString(f, js);

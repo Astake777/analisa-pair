@@ -1,19 +1,20 @@
-/* Terminal analisis: header harga + chart dengan rail setup di kanan, lalu driver, bias, kalender, riwayat. Gelap dulu, terang mengikuti tema viewer. */
+/* Terminal eksekusi (arah dari referensi user): strip akun di atas, chart + ringkasan setup, kolom kanan mesin EA dan risiko.
+   Panel datar dipisah garis tipis, angka besar, satu aksen emas. Gelap karena dipakai berjam-jam bersama chart; tema terang tetap ada. */
 :root {
   color-scheme: dark;
-  --bg: #0b0e11;
-  --card: #1e2329;
-  --raised: #2b3139;
-  --line: #2b3139;
-  --ink: #eaecef;
+  --bg: #0d0e10;
+  --card: #141518;
+  --raised: #1c1e22;
+  --line: #26292e;
+  --ink: #e4e6e9;
   --ink-strong: #ffffff;
-  --muted: #929aa5;
-  --accent: #fcd535;
-  --accent-text: #fcd535;
-  --on-accent: #181a20;
-  --on-trade: #0b0e11; --up: #0ecb81;
-  --down: #ff5c6f;
-  --info: #3b82f6;
+  --muted: #959aa2;
+  --accent: #d9b25f;
+  --accent-text: #e2bd6a;
+  --on-accent: #17130a;
+  --on-trade: #0d0e10; --up: #6fd3ac;
+  --down: #f0857c;
+  --info: #5b9cf5;
   --ema20: #3987e5;
   --ema50: #d55181;
   --ema200: #929aa5;
@@ -30,18 +31,18 @@
 @media (prefers-color-scheme: light) {
   :root:not([data-theme="dark"]) {
     color-scheme: light;
-    --bg: #f5f5f5; --card: #ffffff; --raised: #f5f5f5; --line: #eaecef;
+    --bg: #f3f3f1; --card: #ffffff; --raised: #f3f3f1; --line: #e3e3e0;
     --ink: #181a20; --ink-strong: #000000; --muted: #5e6673;
-    --accent-text: #866500; --on-trade: #ffffff; --up: #05875a; --down: #cf304a;
+    --accent: #b8913a; --accent-text: #7f5f12; --on-trade: #ffffff; --up: #0a7f57; --down: #c23b32;
     --ema20: #2a78d6; --ema50: #e87ba4; --ema200: #5e6673;
     --zone-sell: rgba(207, 48, 74, 0.10); --zone-buy: rgba(5, 135, 90, 0.10); --zone-range: rgba(94, 102, 115, 0.09);
   }
 }
 :root[data-theme="light"] {
   color-scheme: light;
-  --bg: #f5f5f5; --card: #ffffff; --raised: #f5f5f5; --line: #eaecef;
+  --bg: #f3f3f1; --card: #ffffff; --raised: #f3f3f1; --line: #e3e3e0;
   --ink: #181a20; --ink-strong: #000000; --muted: #5e6673;
-  --accent-text: #866500; --on-trade: #ffffff; --up: #05875a; --down: #cf304a;
+  --accent: #b8913a; --accent-text: #7f5f12; --on-trade: #ffffff; --up: #0a7f57; --down: #c23b32;
   --ema20: #2a78d6; --ema50: #e87ba4; --ema200: #5e6673;
   --zone-sell: rgba(207, 48, 74, 0.10); --zone-buy: rgba(5, 135, 90, 0.10); --zone-range: rgba(94, 102, 115, 0.09);
 }
@@ -57,7 +58,7 @@ body {
 .wrap { max-width: 2800px; margin-inline: auto; display: grid; gap: 16px; }
 .num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
 h1, h2, h3 { margin: 0; font-weight: 700; text-wrap: balance; }
-h2 { font-size: 16px; color: var(--ink-strong); }
+h2 { font-size: 17px; font-weight: 650; color: var(--ink-strong); }
 a { color: var(--accent-text); }
 button, input { font: inherit; color: inherit; }
 :focus-visible { outline: 2px solid var(--info); outline-offset: 2px; }
@@ -95,35 +96,25 @@ button, input { font: inherit; color: inherit; }
   color: var(--down); border: 1px solid currentColor; border-radius: var(--r-sm); padding: 2px 8px;
 }
 
-/* hero */
-.hero { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px 24px; align-items: end; padding-top: 8px; }
+/* harga live di kepala chart */
 .pair { font-size: 13px; color: var(--muted); font-weight: 600; }
-.price { font-size: clamp(32px, 6vw, 48px); font-weight: 700; color: var(--ink-strong); letter-spacing: -0.5px; line-height: 1.1; }
-.chg { font-size: 15px; font-weight: 600; margin-left: 8px; }
+.price { font-size: clamp(24px, 3vw, 30px); font-weight: 700; color: var(--ink-strong); letter-spacing: -0.4px; line-height: 1.15; }
+.chg { font-size: 14px; font-weight: 600; margin-left: 8px; }
 .up { color: var(--up); } .down { color: var(--down); } .flat { color: var(--muted); }
 .sub { color: var(--muted); font-size: 13px; }
-.live-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 4px; }
+.live-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0; }
 .badge {
   font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: var(--r-sm);
   background: var(--raised); color: var(--muted); letter-spacing: 0.2px;
 }
 .badge .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--up); margin-right: 6px; vertical-align: 1px; }
 .badge.off .dot { background: var(--down); }
-.status-block { display: grid; gap: 6px; justify-items: end; text-align: right; }
-.pill {
-  display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px;
-  border-radius: 999px; font-weight: 700; font-size: 13px; border: 1px solid currentColor;
-}
-.pill.wait { color: var(--accent-text); }
-.pill.go { color: var(--info); }
-.pill.none { color: var(--muted); }
-.pill svg { width: 14px; height: 14px; }
 
 /* main grid */
 .main { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; align-items: start; }
 /* zoom browser <= 85% (useTigaKolom di App.tsx): kolom kanan kedua untuk Bot MT5 dan kinerja */
 .main.tiga { grid-template-columns: minmax(0, 1fr) 360px 360px; }
-.card { background: var(--card); border-radius: var(--r-xl); padding: 16px; min-width: 0; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r-md); padding: 18px 20px; min-width: 0; }
 .card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
 .seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--line); border-radius: var(--r-md); overflow: hidden; }
 .seg button { min-height: var(--tap); min-width: 44px; padding: 4px 12px; background: transparent; border: 0; cursor: pointer; font-weight: 600; }
@@ -257,8 +248,6 @@ tr:last-child td { border-bottom: 0; }
 }
 @media (max-width: 640px) {
   .duo { grid-template-columns: minmax(0, 1fr); }
-  .hero { grid-template-columns: minmax(0, 1fr); }
-  .status-block { justify-items: start; text-align: left; }
   .lower { grid-template-columns: minmax(0, 1fr); }
   .span2 { grid-column: auto; }
   .card { padding: 12px; }
@@ -370,3 +359,63 @@ tr.det > td { padding: 4px 0 12px; }
 .aktif-baris .sub { font-size: 12px; }
 .aktif-pl { font-weight: 600; }
 .aktif-list .theme-btn { flex: none; min-height: var(--tap); }
+
+/* strip akun: label kecil kapital (pemisah label dari angka di baris padat), angka besar; garis 1px dari gap di atas warna garis */
+.kpi-strip { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 1px; margin: 0; background: var(--line); border: 1px solid var(--line); border-radius: var(--r-md); overflow: hidden; }
+.kpi { background: var(--card); padding: 16px 20px; min-width: 0; }
+.kpi dt, .semasa dt, .gerbang-label { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.kpi dd { margin: 0; }
+.kpi-val { font-size: clamp(20px, 2.1vw, 30px); font-weight: 600; color: var(--ink-strong); margin: 6px 0 2px !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kpi-val.up { color: var(--up); } .kpi-val.down { color: var(--down); }
+/* dua harga dalam satu sel: lebih kecil supaya tidak terpotong di 5 kolom */
+.kpi-val.panjang { font-size: clamp(16px, 1.45vw, 24px); line-height: 1.4; white-space: normal; overflow: visible; }
+.kpi-ket { font-size: 12px; color: var(--muted); }
+
+/* kepala chart: identitas pair + harga live di kiri, timeframe di kanan */
+.chart-head { align-items: flex-start; }
+.chart-id { display: grid; gap: 4px; min-width: 0; }
+.chart-id h2 .sub { font-size: 14px; font-weight: 500; }
+.chart-harga { margin: 0; }
+
+/* ringkasan setup di dasar panel chart, empat sel dipisah garis seperti strip akun */
+.semasa { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; margin: 16px -20px -18px; background: var(--line); border-top: 1px solid var(--line); }
+.semasa > div { background: var(--card); padding: 14px 20px; min-width: 0; }
+.semasa dd { margin: 0; }
+.semasa-val { font-size: 20px; font-weight: 700; color: var(--ink-strong); margin: 4px 0 2px !important; overflow-wrap: anywhere; }
+.semasa-val.up { color: var(--up); } .semasa-val.down { color: var(--down); }
+
+/* mesin eksekusi */
+.tag-garis { font-size: 12px; font-weight: 600; padding: 3px 8px; border: 1px solid var(--line); border-radius: var(--r-sm); color: var(--ink); }
+.ea-hidup { display: flex; align-items: flex-start; gap: 10px; margin: 0 0 12px; }
+.ea-hidup > span:last-child { display: grid; }
+.ea-hidup b { color: var(--ink-strong); }
+.titik { flex: none; width: 8px; height: 8px; border-radius: 50%; margin-top: 7px; }
+.titik.on { background: var(--up); } .titik.off { background: var(--down); }
+/* garis kiri = warna keadaan gerbang (siap / ditahan / mati), bukan hiasan */
+.gerbang { display: grid; gap: 2px; padding: 12px 14px; margin-bottom: 12px; background: var(--raised); border-left: 3px solid var(--muted); border-radius: 0 var(--r-sm) var(--r-sm) 0; }
+.gerbang.go { border-left-color: var(--up); } .gerbang.wait { border-left-color: var(--accent); } .gerbang.off { border-left-color: var(--down); }
+.gerbang b { font-size: 15px; color: var(--ink-strong); text-transform: uppercase; letter-spacing: 0.03em; }
+.gerbang .sub { font-size: 12px; }
+.baris-dl { display: grid; grid-template-columns: minmax(0, 1fr) auto; margin: 0; }
+.baris-dl dt, .baris-dl dd { margin: 0; padding: 8px 0; border-top: 1px solid var(--line); font-size: 13px; }
+.baris-dl dt { color: var(--muted); }
+.baris-dl dd { text-align: right; color: var(--ink-strong); font-weight: 600; }
+.baris-dl dd.down { color: var(--down); }
+.baris-dl dd small { color: var(--muted); font-weight: 500; margin-left: 4px; }
+.baris-dl dt:first-of-type, .baris-dl dt:first-of-type + dd { border-top: 0; }
+.ea-log { margin: 10px 0 0; font-size: 12px; }
+.syarat { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 4px; }
+.syarat summary { min-height: var(--tap); display: flex; align-items: center; cursor: pointer; font-size: 13px; font-weight: 600; color: var(--ink); }
+.syarat p { margin: 0 0 6px; font-size: 12px; }
+.panel .bot-ctl { border-top: 0; margin-top: 0; padding-top: 0; }
+
+@media (max-width: 1100px) {
+  .kpi-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  .kpi-strip, .semasa { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .kpi:last-child { grid-column: 1 / -1; }
+  .kpi { padding: 12px 14px; }
+  .semasa { margin: 12px -12px -12px; }
+  .semasa > div { padding: 12px 14px; }
+}

@@ -41,6 +41,7 @@ HARI_RIWAYAT = 60
 TF_WEB = {"M1": "TIMEFRAME_M1", "M5": "TIMEFRAME_M5", "M15": "TIMEFRAME_M15", "M30": "TIMEFRAME_M30",
           "H1": "TIMEFRAME_H1", "H4": "TIMEFRAME_H4", "D1": "TIMEFRAME_D1", "W1": "TIMEFRAME_W1"}
 NEWS_FILE = os.path.join(os.environ.get("APPDATA", ""), "MetaQuotes", "Terminal", "Common", "Files", "analisa_news.csv")
+EA_STATUS = os.path.join(os.path.dirname(NEWS_FILE), "sniperbot_status.json")   # ditulis EA tiap 30 detik
 KUNCI = threading.Lock()   # paket MetaTrader5 tidak aman dipakai beberapa thread sekaligus
 utc = lambda ts: int(ts - mt5_link.offset_server(ts - 3 * 3600))   # jam server -> UTC (pola mt5_link.candles)
 iso = lambda ts: dt.datetime.fromtimestamp(utc(ts), dt.timezone.utc).isoformat() if ts else None
@@ -287,6 +288,8 @@ def handler(mt5, nama, token=None):
                         body = mikro(mt5, nama)
                     elif u.path == "/setup/batal":
                         body = batal_baca()
+                    elif u.path == "/ea/status":
+                        body = ea_status()
                     elif u.path == "/akun/posisi":
                         body = akun_posisi(mt5, nama, konfig(data.env())["risiko"])
                     elif u.path == "/candles" and q.get("tf", ["M1"])[0] in TF_WEB:
@@ -416,6 +419,15 @@ def status_ea(mt5, akun, nama, rows, risiko, now):
             "pengaman": {"boleh_order": algo, "alasan": "" if algo else "Algo Trading MT5 mati", "spread": sym.spread,
                          "spread_median": None, "news": False, "kill_switch": False, "ea": True},
             "syarat_live": cek, "updated_at": dt.datetime.now(dt.timezone.utc).isoformat()}
+
+
+def ea_status(path=None, now=None):
+    """Status terakhir EA SniperBot + umur detik (EA tidak jalan -> umur besar / file tidak ada)."""
+    try:
+        st = json.load(open(path or EA_STATUS, encoding="ascii", errors="replace"))
+    except (OSError, ValueError):
+        return {"ada": False}
+    return {**st, "ada": True, "umur": round((now or time.time()) - st.get("waktu_utc", 0))}
 
 
 def tulis_news():
@@ -626,6 +638,11 @@ def _selftest():
             raise AssertionError("tiket asing harus ditolak")
         except ValueError:
             pass
+    with tempfile.TemporaryDirectory() as d:
+        f = os.path.join(d, "st.json")
+        assert ea_status(f) == {"ada": False}
+        json.dump({"waktu_utc": 100, "boleh_order": True}, open(f, "w"))
+        assert ea_status(f, now=130) == {"waktu_utc": 100, "boleh_order": True, "ada": True, "umur": 30}
     print("selftest OK")
 
 

@@ -16,7 +16,7 @@ type Props = {
   zones: Band[]
   levels: { price: number; label: string; kind: string }[]
   emptyText: string
-  bot?: { side: string; lot: number; entry: number; sl: number; tp: number; status: string }[]
+  bot?: { side: string; lot: number; entry: number; sl: number; tp: number; status: string; nama?: string }[]
 }
 const NO_BOT: NonNullable<Props['bot']> = []
 
@@ -145,7 +145,7 @@ export default function Chart({ bars, shift, setup, zones, levels, emptyText, bo
     lines.current.forEach((l) => a.candles.removePriceLine(l))
     lines.current = []
     const add = (price: number | undefined, color: string, title: string, style: LineStyle) => {
-      if (price == null) return
+      if (!price) return   // 0 = posisi tanpa SL/TP di MT5
       lines.current.push(a.candles.createPriceLine({ price: price + shift, color, lineWidth: 1, lineStyle: style, axisLabelVisible: true, title }))
     }
     // Saat ada setup, chart hanya memuat garis setup supaya tidak tertukar dengan S/R.
@@ -162,9 +162,10 @@ export default function Chart({ bars, shift, setup, zones, levels, emptyText, bo
     // order/posisi bot MT5 di atas garis setup, supaya selalu terlihat apa yang benar-benar dipasang
     for (const o of bot) {
       const jenis = o.status === 'PENDING' ? `${o.side.toUpperCase()} LIMIT` : o.side.toUpperCase()
-      add(o.entry, css('--accent'), `Bot ${jenis} ${o.lot}`, LineStyle.Solid)
-      add(o.sl, css('--down'), 'Bot SL', LineStyle.Dotted)
-      add(o.tp, css('--up'), 'Bot TP', LineStyle.Dotted)
+      const n = o.nama ?? 'Bot'
+      add(o.entry, css('--accent'), `${n} ${jenis} ${o.lot}`, LineStyle.Solid)
+      add(o.sl, css('--down'), `${n} SL`, LineStyle.Dotted)
+      add(o.tp, css('--up'), `${n} TP`, LineStyle.Dotted)
     }
     extras.current = [...(setup ? [setup.entry, setup.sl, ...(setup.tp ?? [])] : []), ...bot.flatMap((o) => [o.entry, o.sl, o.tp])]
       .filter((v) => v != null).map((v) => v + shift)

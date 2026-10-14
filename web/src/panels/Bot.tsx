@@ -1,11 +1,9 @@
 import { useState, type FormEvent } from 'react'
-import type { BotStatus, BotTrade, Setup, Side } from '../lib/supabase'
-import { age, fmt, wibTime } from '../lib/format'
+import type { Setup, Side } from '../lib/supabase'
+import { fmt } from '../lib/format'
 import { useAksi, type Mt5 } from './Posisi'
 
-type R<T> = { rows: T[] | null; error: string | null }
 
-const MIGRASI = 'supabase/migrations/20261008020000_bot_mt5.sql'
 
 const PIP = 0.1   // 1 pip XAUUSD = $0.10
 const KOSONG = { side: 'buy' as Side, entry: '', sl: '20', tp: '100', lot: '' }   // sl/tp dalam pips dari entry
@@ -44,8 +42,8 @@ function KontrolMt5({ setup, off, mt5 }: { setup?: Setup | null; off: number; mt
 
   return (
     <div className="bot-ctl">
-      <div className="bot-top">
-        <h3>Kontrol order MT5</h3>
+      <div className="card-head">
+        <h2 id="orderTitle">Kontrol order MT5</h2>
         {a && <span className={`bot-akun ${a.akun === 'real' ? 'real' : ''}`}>{a.akun === 'real' ? 'AKUN REAL' : AKUN}</span>}
       </div>
       {putus && <p className="setup-state off" role="alert">Kontrol MT5 butuh jembatan MT5 (mulai_trading.bat)</p>}
@@ -87,53 +85,10 @@ function KontrolMt5({ setup, off, mt5 }: { setup?: Setup | null; off: number; mt
   )
 }
 
-export function Bot({ status, trades, setup, off = 0, mt5 }: { status: R<BotStatus>; trades: R<BotTrade>; setup?: Setup | null; off?: number; mt5: Mt5 }) {
-  const s = status.rows?.[0]
-  const mati = s ? Date.now() - Date.parse(s.updated_at) > 3 * 60e3 : true
-  const selesai = (trades.rows ?? []).filter((t) => t.akun === 'demo' && ['TP', 'SL', 'BE'].includes(t.status))
-  const tp = selesai.filter((t) => t.status === 'TP').length
-  const be = selesai.filter((t) => t.status === 'BE').length
-  const totalR = selesai.reduce((a, t) => a + Number(t.r ?? 0), 0)
-  const pl = selesai.reduce((a, t) => a + Number(t.pl ?? 0), 0)
-
-  let isi
-  if (status.error) {
-    isi = <p className="sub">Tabel bot belum ada ({status.error}). Jalankan <code>{MIGRASI}</code> di SQL Editor Supabase.</p>
-  } else if (!status.rows) {
-    isi = <p className="sub">Memuat status bot.</p>
-  } else if (!s) {
-    isi = <p className="sub">Bot belum pernah berjalan. Isi MT5_LOGIN, MT5_PASSWORD, MT5_SERVER akun demo di <code>.env</code>, lalu minta Claude menjalankan bot.</p>
-  } else {
-    const g = s.pengaman ?? {}
-    isi = (
-      <>
-        <div className="bot-top">
-          <span className={`bot-akun ${s.akun === 'real' ? 'real' : ''}`}>{s.akun === 'real' ? 'AKUN REAL' : 'DEMO'}</span>
-          <span className="sub">{s.server} · {s.simbol ?? '-'} · risiko {(s.risiko * 100).toFixed(0)}% saldo · lot ikut lebar SL</span>
-        </div>
-        <p className={`setup-state ${mati ? 'off' : g.boleh_order ? 'go' : 'wait'}`} role="status">
-          {mati ? `Bot tidak aktif (update terakhir ${age(s.updated_at)}).` : g.boleh_order ? 'Bot aktif, siap pasang order saat setup muncul.' : `Bot aktif, order baru ditahan: ${g.alasan}.`}
-        </p>
-        <dl className="kv">
-          <dt>Saldo</dt><dd className="num wide">{fmt(s.saldo, 2)}</dd>
-          <dt>Ekuitas</dt><dd className="num wide">{fmt(s.ekuitas, 2)}</dd>
-          <dt>P/L hari ini</dt><dd className={`num wide ${(s.pl_hari_ini ?? 0) >= 0 ? 'up' : 'down'}`}>{fmt(s.pl_hari_ini, 2)}</dd>
-          <dt>SL / entry hari ini</dt><dd className="num wide">{s.sl_hari_ini}/2 SL · {s.entry_hari_ini}/3 entry</dd>
-          <dt>Spread</dt><dd className="num wide">{g.spread ?? '-'} poin (median {g.spread_median ?? '-'})</dd>
-        </dl>
-        <p className="exp-tag">Real test demo: {selesai.length} trade selesai, {tp} TP, {be} BE, {totalR >= 0 ? '+' : ''}{totalR.toFixed(1)}R, P/L {fmt(pl, 2)}.</p>
-        {s.syarat_live && (
-          <ul className="cek">
-            {Object.entries(s.syarat_live).map(([k, v]) => <li key={k} className={v ? 'up' : 'sub'}>{v ? 'Lulus' : 'Belum'}: {k}</li>)}
-          </ul>
-        )}
-      </>
-    )
-  }
+// Tombol order manual ke MT5 (Set limit, Close all) di kartunya sendiri; status EA ada di kartu Mesin eksekusi.
+export function KontrolOrder({ setup, off = 0, mt5 }: { setup?: Setup | null; off?: number; mt5: Mt5 }) {
   return (
-    <section className="card" aria-labelledby="botTitle">
-      <div className="card-head"><h2 id="botTitle">Bot MT5</h2>{s && <span className="sub">{wibTime(s.updated_at)}</span>}</div>
-      {isi}
+    <section className="card panel" aria-labelledby="orderTitle">
       <KontrolMt5 setup={setup} off={off} mt5={mt5} />
     </section>
   )

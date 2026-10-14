@@ -36,6 +36,7 @@ export type Payload = {
   strategi?: {
     regime?: { tren?: string; volatilitas?: string; sesi?: string; jendelaNews?: boolean }
     terpilih?: string; alasan?: string
+    kandidat?: { strategy: string; regime: string; trades: number; winrate: number | null; expectancy: number | null; sample?: string }[]
   }
   amd?: {
     tanggal?: string; fase?: string; catatan?: string
